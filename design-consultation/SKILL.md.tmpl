@@ -52,7 +52,8 @@ ls src/ app/ pages/ components/ 2>/dev/null | head -30
 Look for office-hours output:
 
 ```bash
-source <(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+source <("$_GS/bin/gstack-slug" 2>/dev/null)
 ls ~/.gstack/projects/$SLUG/*office-hours* 2>/dev/null | head -5
 ls .context/*office-hours* .context/attachments/*office-hours* 2>/dev/null | head -5
 ```

@@ -22,29 +22,57 @@ allowed-tools:
 ## Preamble (run first)
 
 ```bash
-_UPD=$(~/.claude/skills/gstack/bin/gstack-update-check 2>/dev/null || .claude/skills/gstack/bin/gstack-update-check 2>/dev/null || true)
+# Resolve gstack install directory (prefer .agents/, fallback .claude/)
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+_GS_LOCAL=$([ -d ".agents/skills/gstack" ] && echo ".agents/skills/gstack" || echo ".claude/skills/gstack")
+echo "GSTACK_DIR: $_GS"
+
+# Resolve project agent config directory
+_AD=$([ -d ".agents" ] && echo ".agents" || ([ -d ".claude" ] && echo ".claude" || echo ".agents"))
+echo "AGENT_DIR: $_AD"
+
+# Resolve context file
+_CF=$([ -f "AGENTS.md" ] && echo "AGENTS.md" || ([ -f "CLAUDE.md" ] && echo "CLAUDE.md" || echo "AGENTS.md"))
+echo "CONTEXT_FILE: $_CF"
+
+_UPD=$("$_GS/bin/gstack-update-check" 2>/dev/null || "$_GS_LOCAL/bin/gstack-update-check" 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 mkdir -p ~/.gstack/sessions
 touch ~/.gstack/sessions/"$PPID"
 _SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
 find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
-_CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
-_PROACTIVE=$(~/.claude/skills/gstack/bin/gstack-config get proactive 2>/dev/null || echo "true")
+_CONTRIB=$("$_GS/bin/gstack-config" get gstack_contributor 2>/dev/null || true)
+_PROACTIVE=$("$_GS/bin/gstack-config" get proactive 2>/dev/null || echo "true")
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 echo "BRANCH: $_BRANCH"
 echo "PROACTIVE: $_PROACTIVE"
 _LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
-_EXA=$(~/.claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || .claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || echo "EXA_MISSING")
+_EXA=$("$_GS/bin/gstack-web-search" --check 2>/dev/null || "$_GS_LOCAL/bin/gstack-web-search" --check 2>/dev/null || echo "EXA_MISSING")
 echo "EXA_SEARCH: $_EXA"
 mkdir -p ~/.gstack/analytics
 echo '{"skill":"plan-eng-review","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```
 
+**Path conventions:** The preamble prints `GSTACK_DIR`, `AGENT_DIR`, and `CONTEXT_FILE`.
+Use these throughout:
+- **Gstack binaries:** Use the `GSTACK_DIR` path (e.g. `$GSTACK_DIR/bin/gstack-web-search`). In bash blocks, re-resolve with: `_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")`
+- **Project config:** Use `AGENT_DIR` (e.g. `$AGENT_DIR/stack.yaml`, `$AGENT_DIR/architecture/rules/`, `$AGENT_DIR/research/`, `$AGENT_DIR/compound/`). In bash blocks, re-resolve with: `_AD=$([ -d ".agents" ] && echo ".agents" || echo ".claude")`
+- **Context file:** Use `CONTEXT_FILE` (either `AGENTS.md` or `CLAUDE.md`, whichever exists).
+
+## User Skill Detection
+
+Check `<available_skills>` for user-provided skills in these categories. **Prefer the user's own skills** over gstack built-ins when available:
+
+- **Web search:** If the user has a web search skill (e.g. `native-web-search`, `x-research`), prefer it over `gstack-web-search`. Use the `web_search` or `read_web_page` tools directly if available.
+- **Docs & research:** If the user has `context7`, `docs-research`, or similar skills, prefer those for library lookups and documentation.
+- **Observability & debugging:** If the user has error tracking (`sentry-cli`), APM (`newrelic-inspector`), analytics (`posthog-cli`), or data warehouse skills, use them during `/investigate` and `/compound` workflows.
+- **Browser: ALWAYS use gstack's /browse skill** with `agent-browser` (`$AB`). Never use user-provided browser skills (`web-browser`, `agent-browser` standalone, `mcp__claude-in-chrome__*`). The gstack browser has session isolation, cookie management, and ref system integration that other browser tools lack.
+
 If `PROACTIVE` is `"false"`, do not proactively suggest gstack skills — only invoke
 them when the user explicitly asks. The user opted out of proactive suggestions.
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/gstack/gstack-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
+If output shows `UPGRADE_AVAILABLE <old> <new>`: read `$GSTACK_DIR/gstack-upgrade/SKILL.md` (using the `GSTACK_DIR` from the preamble) and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
 
 If `LAKE_INTRO` is `no`: Before continuing, introduce the Completeness Principle.
 Tell the user: "gstack follows the **Boil the Lake** principle — always do the complete
@@ -157,27 +185,31 @@ ATTEMPTED: [what you tried]
 RECOMMENDATION: [what the user should do next]
 ```
 
-## Web Search (Exa)
+## Web Search
 
-If the preamble printed `EXA_SEARCH: EXA_READY`, Exa web search is available. Use the gstack CLI for all web research:
+**Priority order for web search:**
+1. **Native tools first:** If you have `web_search` or `read_web_page` tools available (provided by pi, Claude Code, or other harnesses), use those directly — they require no setup.
+2. **User skills:** If `<available_skills>` lists a web search skill (e.g. `native-web-search`, `x-research`), read and use it.
+3. **gstack Exa fallback:** If the preamble printed `EXA_SEARCH: EXA_READY`, use the gstack CLI:
 
-**Search the web:**
 ```bash
-~/.claude/skills/gstack/bin/gstack-web-search "your search query"
-~/.claude/skills/gstack/bin/gstack-web-search "your query" --results 10
-~/.claude/skills/gstack/bin/gstack-web-search "your query" --contents          # include full page text
-~/.claude/skills/gstack/bin/gstack-web-search "your query" --category news     # filter: company, research paper, news, pdf, github, tweet, personal site
-~/.claude/skills/gstack/bin/gstack-web-search "your query" --domain github.com # restrict to domain
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+"$_GS/bin/gstack-web-search" "your search query"
+"$_GS/bin/gstack-web-search" "your query" --results 10
+"$_GS/bin/gstack-web-search" "your query" --contents          # include full page text
+"$_GS/bin/gstack-web-search" "your query" --category news     # filter: company, research paper, news, pdf, github, tweet, personal site
+"$_GS/bin/gstack-web-search" "your query" --domain github.com # restrict to domain
 ```
 
 **Read a specific URL:**
 ```bash
-~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page"
-~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page" --max-chars 20000
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+"$_GS/bin/gstack-read-url" "https://example.com/page"
+"$_GS/bin/gstack-read-url" "https://example.com/page" --max-chars 20000
 ```
 
-If `EXA_SEARCH: EXA_MISSING`, web search is not configured. Tell the user:
-"Web search is not available — run `./setup` in the gstack directory to add your Exa API key, or add it manually: `echo 'EXA_API_KEY=your-key' >> ~/.gstack/.env`"
+If none of the above are available, tell the user:
+"Web search is not available — either use an agent harness with built-in web search (pi, Claude Code) or add an Exa API key: `echo 'EXA_API_KEY=your-key' >> ~/.gstack/.env`"
 Then continue without web search — use local docs and Context7 only.
 
 # Plan Review Mode
@@ -226,7 +258,8 @@ When evaluating architecture, think "boring by default." When reviewing tests, t
 
 ### Design Doc Check
 ```bash
-SLUG=$(~/.claude/skills/gstack/browse/bin/remote-slug 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+SLUG=$("$_GS/browse/bin/remote-slug" 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null | tr '/' '-' || echo 'no-branch')
 DESIGN=$(ls -t ~/.gstack/projects/$SLUG/*-$BRANCH-design-*.md 2>/dev/null | head -1)
 [ -z "$DESIGN" ] && DESIGN=$(ls -t ~/.gstack/projects/$SLUG/*-design-*.md 2>/dev/null | head -1)
@@ -240,12 +273,12 @@ Before Step 0, read the repository's stack context if it exists:
 
 ```bash
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-~/.claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || .claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || true
+"$_GS/bin/gstack-stack-detect" --project-root "$PROJECT_ROOT" --json 2>/dev/null || "$_GS_LOCAL/bin/gstack-stack-detect" --project-root "$PROJECT_ROOT" --json 2>/dev/null || true
 ```
 
-1. Read `.claude/stack.yaml` if present.
-2. Read the relevant files in `.claude/architecture/rules/` for the detected or proposed stacks.
-3. Read the most relevant memos in `.claude/research/` and patterns in `.claude/compound/patterns/`.
+1. Read the project agent config dir (`$AGENT_DIR/stack.yaml`) if present.
+2. Read the relevant files in `$AGENT_DIR/architecture/rules/` for the detected or proposed stacks.
+3. Read the most relevant memos in `$AGENT_DIR/research/` and patterns in `$AGENT_DIR/compound/patterns/`.
 4. If the plan introduces a new framework, major version jump, or architecture pattern and there is no recent research memo covering it, do the research now: use local docs first, then Context7/`gstack-web-search` guidance via `/docs-research` or equivalent inline research before approving the plan.
 5. If the stack manifest or rule files are missing for a clearly detected stack, note that they should be scaffolded or updated as part of the plan output.
 
@@ -324,7 +357,8 @@ For LLM/prompt changes: check the "Prompt/LLM changes" file patterns listed in C
 After producing the test diagram, write a test plan artifact to the project directory so `/qa` and `/qa-report` can consume it as primary test input (replacing the lossy git-diff heuristic):
 
 ```bash
-source <(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null) && mkdir -p ~/.gstack/projects/$SLUG
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+source <("$_GS/bin/gstack-slug" 2>/dev/null) && mkdir -p ~/.gstack/projects/$SLUG
 USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
 ```
@@ -390,15 +424,15 @@ List existing code/flows that already partially solve sub-problems in this plan,
 
 ### Stack rules & research follow-up
 List which stack-aware artifacts should change because of this plan:
-- `.claude/stack.yaml`
-- `.claude/architecture/rules/<stack>.md`
+- the project agent config dir (`$AGENT_DIR/stack.yaml`)
+- `$AGENT_DIR/architecture/rules/<stack>.md`
 - `docs/architecture/stacks/<stack>.md`
 - `.claude/research/<memo>.md`
 
 If no stack-aware artifact changes are needed, say so explicitly.
 
 ### TODOS.md updates
-After all review sections are complete, present each potential TODO as its own individual AskUserQuestion. Never batch TODOs — one per question. Never silently skip this step. Follow the format in `.claude/skills/review/TODOS-format.md`.
+After all review sections are complete, present each potential TODO as its own individual AskUserQuestion. Never batch TODOs — one per question. Never silently skip this step. Follow the format in `$AGENT_DIR/skills/review/TODOS-format.md`.
 
 For each TODO, describe:
 * **What:** One-line description of the work.
@@ -450,7 +484,7 @@ Check the git log for this branch. If there are prior commits suggesting a previ
 After producing the Completion Summary above, persist the review result:
 
 ```bash
-~/.claude/skills/gstack/bin/gstack-review-log '{"skill":"plan-eng-review","timestamp":"TIMESTAMP","status":"STATUS","unresolved":N,"critical_gaps":N,"mode":"MODE","commit":"COMMIT"}'
+"$_GS/bin/gstack-review-log" '{"skill":"plan-eng-review","timestamp":"TIMESTAMP","status":"STATUS","unresolved":N,"critical_gaps":N,"mode":"MODE","commit":"COMMIT"}'
 ```
 
 Substitute values from the Completion Summary:
@@ -466,7 +500,8 @@ Substitute values from the Completion Summary:
 After completing the review, read the review log and config to display the dashboard.
 
 ```bash
-~/.claude/skills/gstack/bin/gstack-review-read
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+"$_GS/bin/gstack-review-read"
 ```
 
 Parse the output. Find the most recent entry for each skill (plan-ceo-review, plan-eng-review, plan-design-review, design-review-lite, codex-review). Ignore entries with timestamps older than 7 days. For Design Review, show whichever is more recent between `plan-design-review` (full visual audit) and `design-review-lite` (code-level check). Append "(FULL)" or "(LITE)" to the status to distinguish. Display:

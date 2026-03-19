@@ -53,7 +53,7 @@ Gather context before forming any hypothesis.
 
 2. **Read the code:** Trace the code path from the symptom back to potential causes. Use Grep to find all references, Read to understand the logic.
 
-3. **Read stack context:** If `.claude/stack.yaml` exists, read it. Read the relevant files in `.claude/architecture/rules/`, recent memos in `.claude/research/`, and related notes in `.claude/compound/` before forming a fix. Bugs often repeat known architectural mistakes.
+3. **Read stack context:** If the project agent config dir (`$AGENT_DIR/stack.yaml`) exists, read it. Read the relevant files in `$AGENT_DIR/architecture/rules/`, recent memos in `$AGENT_DIR/research/`, and related notes in `$AGENT_DIR/compound/` before forming a fix. Bugs often repeat known architectural mistakes.
 
 4. **Check recent changes:**
    ```bash
@@ -179,7 +179,7 @@ Output a structured debug report:
 
 Then answer these two questions explicitly:
 1. **Human prevention:** What will help another engineer avoid this mistake next time — a test, rule file update, stronger abstraction, better error, or a doc change?
-2. **Agent prevention:** What should change so the agent does not make the same mistake again — `/investigate`, `/review`, `/plan-eng-review`, `.claude/architecture/rules/`, `CLAUDE.md`, or a new eval fixture?
+2. **Agent prevention:** What should change so the agent does not make the same mistake again — `/investigate`, `/review`, `/plan-eng-review`, `$AGENT_DIR/architecture/rules/`, `AGENTS.md` (or `CLAUDE.md`), or a new eval fixture?
 
 If the lesson is durable, recommend `/compound` or write the incident note yourself if the user explicitly asked for learning capture.
 DEBUG REPORT

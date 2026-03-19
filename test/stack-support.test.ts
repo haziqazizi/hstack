@@ -47,29 +47,31 @@ describe('stack registry and bootstrap', () => {
 
       expect(result.manifestCreated).toBe(true);
       expect(result.selected).toContain('rails');
-      expect(fs.existsSync(path.join(dir, '.claude', 'stack.yaml'))).toBe(true);
-      expect(fs.existsSync(path.join(dir, '.claude', 'architecture', 'rules', 'rails.md'))).toBe(true);
+      // New projects default to .agents/ directory
+      expect(fs.existsSync(path.join(dir, '.agents', 'stack.yaml'))).toBe(true);
+      expect(fs.existsSync(path.join(dir, '.agents', 'architecture', 'rules', 'rails.md'))).toBe(true);
       expect(fs.existsSync(path.join(dir, 'docs', 'architecture', 'stacks', 'rails.md'))).toBe(true);
-      const claude = fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf-8');
-      expect(claude).toContain('Stack-Aware Research & Architecture');
-      expect(claude).toContain('/docs-research');
-      expect(claude).toContain('/compound');
+      // New projects get AGENTS.md (provider-agnostic)
+      const agents = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8');
+      expect(agents).toContain('Stack-Aware Research & Architecture');
+      expect(agents).toContain('/docs-research');
+      expect(agents).toContain('/compound');
     });
   });
 
   test('bootstrap respects existing stack manifest and does not overwrite rule files', () => {
     withTempProject(dir => {
-      fs.mkdirSync(path.join(dir, '.claude', 'architecture', 'rules'), { recursive: true });
+      fs.mkdirSync(path.join(dir, '.agents', 'architecture', 'rules'), { recursive: true });
       fs.mkdirSync(path.join(dir, 'docs', 'architecture', 'stacks'), { recursive: true });
-      fs.writeFileSync(path.join(dir, '.claude', 'stack.yaml'), `current:\n  - name: react\n    role: frontend\nproposed:\n  - name: flutter\n    role: mobile\nresearch:\n  providers:\n    - context7\n    - web-search\nactive_rule_files:\n  - .claude/architecture/rules/react.md\n  - .claude/architecture/rules/flutter.md\n`);
-      fs.writeFileSync(path.join(dir, '.claude', 'architecture', 'rules', 'react.md'), '# custom react rules\n');
+      fs.writeFileSync(path.join(dir, '.agents', 'stack.yaml'), `current:\n  - name: react\n    role: frontend\nproposed:\n  - name: flutter\n    role: mobile\nresearch:\n  providers:\n    - context7\n    - web-search\nactive_rule_files:\n  - .agents/architecture/rules/react.md\n  - .agents/architecture/rules/flutter.md\n`);
+      fs.writeFileSync(path.join(dir, '.agents', 'architecture', 'rules', 'react.md'), '# custom react rules\n');
 
       const result = bootstrapProjectStack(dir, loadStackRegistry());
 
       expect(result.manifestCreated).toBe(false);
       expect(result.selected).toEqual(['react', 'flutter']);
-      expect(fs.readFileSync(path.join(dir, '.claude', 'architecture', 'rules', 'react.md'), 'utf-8')).toBe('# custom react rules\n');
-      expect(fs.existsSync(path.join(dir, '.claude', 'architecture', 'rules', 'flutter.md'))).toBe(true);
+      expect(fs.readFileSync(path.join(dir, '.agents', 'architecture', 'rules', 'react.md'), 'utf-8')).toBe('# custom react rules\n');
+      expect(fs.existsSync(path.join(dir, '.agents', 'architecture', 'rules', 'flutter.md'))).toBe(true);
       expect(fs.existsSync(path.join(dir, 'docs', 'architecture', 'stacks', 'flutter.md'))).toBe(true);
     });
   });

@@ -67,7 +67,8 @@ When evaluating architecture, think "boring by default." When reviewing tests, t
 
 ### Design Doc Check
 ```bash
-SLUG=$(~/.claude/skills/gstack/browse/bin/remote-slug 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+SLUG=$("$_GS/browse/bin/remote-slug" 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null | tr '/' '-' || echo 'no-branch')
 DESIGN=$(ls -t ~/.gstack/projects/$SLUG/*-$BRANCH-design-*.md 2>/dev/null | head -1)
 [ -z "$DESIGN" ] && DESIGN=$(ls -t ~/.gstack/projects/$SLUG/*-design-*.md 2>/dev/null | head -1)
@@ -81,12 +82,12 @@ Before Step 0, read the repository's stack context if it exists:
 
 ```bash
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-~/.claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || .claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || true
+"$_GS/bin/gstack-stack-detect" --project-root "$PROJECT_ROOT" --json 2>/dev/null || "$_GS_LOCAL/bin/gstack-stack-detect" --project-root "$PROJECT_ROOT" --json 2>/dev/null || true
 ```
 
-1. Read `.claude/stack.yaml` if present.
-2. Read the relevant files in `.claude/architecture/rules/` for the detected or proposed stacks.
-3. Read the most relevant memos in `.claude/research/` and patterns in `.claude/compound/patterns/`.
+1. Read the project agent config dir (`$AGENT_DIR/stack.yaml`) if present.
+2. Read the relevant files in `$AGENT_DIR/architecture/rules/` for the detected or proposed stacks.
+3. Read the most relevant memos in `$AGENT_DIR/research/` and patterns in `$AGENT_DIR/compound/patterns/`.
 4. If the plan introduces a new framework, major version jump, or architecture pattern and there is no recent research memo covering it, do the research now: use local docs first, then Context7/`gstack-web-search` guidance via `/docs-research` or equivalent inline research before approving the plan.
 5. If the stack manifest or rule files are missing for a clearly detected stack, note that they should be scaffolded or updated as part of the plan output.
 
@@ -165,7 +166,8 @@ For LLM/prompt changes: check the "Prompt/LLM changes" file patterns listed in C
 After producing the test diagram, write a test plan artifact to the project directory so `/qa` and `/qa-report` can consume it as primary test input (replacing the lossy git-diff heuristic):
 
 ```bash
-source <(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null) && mkdir -p ~/.gstack/projects/$SLUG
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+source <("$_GS/bin/gstack-slug" 2>/dev/null) && mkdir -p ~/.gstack/projects/$SLUG
 USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
 ```
@@ -231,15 +233,15 @@ List existing code/flows that already partially solve sub-problems in this plan,
 
 ### Stack rules & research follow-up
 List which stack-aware artifacts should change because of this plan:
-- `.claude/stack.yaml`
-- `.claude/architecture/rules/<stack>.md`
+- the project agent config dir (`$AGENT_DIR/stack.yaml`)
+- `$AGENT_DIR/architecture/rules/<stack>.md`
 - `docs/architecture/stacks/<stack>.md`
 - `.claude/research/<memo>.md`
 
 If no stack-aware artifact changes are needed, say so explicitly.
 
 ### TODOS.md updates
-After all review sections are complete, present each potential TODO as its own individual AskUserQuestion. Never batch TODOs — one per question. Never silently skip this step. Follow the format in `.claude/skills/review/TODOS-format.md`.
+After all review sections are complete, present each potential TODO as its own individual AskUserQuestion. Never batch TODOs — one per question. Never silently skip this step. Follow the format in `$AGENT_DIR/skills/review/TODOS-format.md`.
 
 For each TODO, describe:
 * **What:** One-line description of the work.
@@ -291,7 +293,7 @@ Check the git log for this branch. If there are prior commits suggesting a previ
 After producing the Completion Summary above, persist the review result:
 
 ```bash
-~/.claude/skills/gstack/bin/gstack-review-log '{"skill":"plan-eng-review","timestamp":"TIMESTAMP","status":"STATUS","unresolved":N,"critical_gaps":N,"mode":"MODE","commit":"COMMIT"}'
+"$_GS/bin/gstack-review-log" '{"skill":"plan-eng-review","timestamp":"TIMESTAMP","status":"STATUS","unresolved":N,"critical_gaps":N,"mode":"MODE","commit":"COMMIT"}'
 ```
 
 Substitute values from the Completion Summary:

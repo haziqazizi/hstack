@@ -3,7 +3,7 @@ name: document-release
 version: 1.0.0
 description: |
   Post-ship documentation update. Reads all project docs, cross-references the
-  diff, updates README/ARCHITECTURE/CONTRIBUTING/CLAUDE.md to match what shipped,
+  diff, updates README/ARCHITECTURE/CONTRIBUTING/AGENTS.md (or CLAUDE.md) to match what shipped,
   polishes CHANGELOG voice, cleans up TODOS, and optionally bumps VERSION. Use when
   asked to "update the docs", "sync documentation", or "post-ship docs".
   Proactively suggest after a PR is merged or code is shipped.
@@ -22,29 +22,57 @@ allowed-tools:
 ## Preamble (run first)
 
 ```bash
-_UPD=$(~/.claude/skills/gstack/bin/gstack-update-check 2>/dev/null || .claude/skills/gstack/bin/gstack-update-check 2>/dev/null || true)
+# Resolve gstack install directory (prefer .agents/, fallback .claude/)
+_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")
+_GS_LOCAL=$([ -d ".agents/skills/gstack" ] && echo ".agents/skills/gstack" || echo ".claude/skills/gstack")
+echo "GSTACK_DIR: $_GS"
+
+# Resolve project agent config directory
+_AD=$([ -d ".agents" ] && echo ".agents" || ([ -d ".claude" ] && echo ".claude" || echo ".agents"))
+echo "AGENT_DIR: $_AD"
+
+# Resolve context file
+_CF=$([ -f "AGENTS.md" ] && echo "AGENTS.md" || ([ -f "CLAUDE.md" ] && echo "CLAUDE.md" || echo "AGENTS.md"))
+echo "CONTEXT_FILE: $_CF"
+
+_UPD=$("$_GS/bin/gstack-update-check" 2>/dev/null || "$_GS_LOCAL/bin/gstack-update-check" 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 mkdir -p ~/.gstack/sessions
 touch ~/.gstack/sessions/"$PPID"
 _SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
 find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
-_CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
-_PROACTIVE=$(~/.claude/skills/gstack/bin/gstack-config get proactive 2>/dev/null || echo "true")
+_CONTRIB=$("$_GS/bin/gstack-config" get gstack_contributor 2>/dev/null || true)
+_PROACTIVE=$("$_GS/bin/gstack-config" get proactive 2>/dev/null || echo "true")
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 echo "BRANCH: $_BRANCH"
 echo "PROACTIVE: $_PROACTIVE"
 _LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
-_EXA=$(~/.claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || .claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || echo "EXA_MISSING")
+_EXA=$("$_GS/bin/gstack-web-search" --check 2>/dev/null || "$_GS_LOCAL/bin/gstack-web-search" --check 2>/dev/null || echo "EXA_MISSING")
 echo "EXA_SEARCH: $_EXA"
 mkdir -p ~/.gstack/analytics
 echo '{"skill":"document-release","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```
 
+**Path conventions:** The preamble prints `GSTACK_DIR`, `AGENT_DIR`, and `CONTEXT_FILE`.
+Use these throughout:
+- **Gstack binaries:** Use the `GSTACK_DIR` path (e.g. `$GSTACK_DIR/bin/gstack-web-search`). In bash blocks, re-resolve with: `_GS=$([ -d "$HOME/.agents/skills/gstack" ] && echo "$HOME/.agents/skills/gstack" || echo "$HOME/.claude/skills/gstack")`
+- **Project config:** Use `AGENT_DIR` (e.g. `$AGENT_DIR/stack.yaml`, `$AGENT_DIR/architecture/rules/`, `$AGENT_DIR/research/`, `$AGENT_DIR/compound/`). In bash blocks, re-resolve with: `_AD=$([ -d ".agents" ] && echo ".agents" || echo ".claude")`
+- **Context file:** Use `CONTEXT_FILE` (either `AGENTS.md` or `CLAUDE.md`, whichever exists).
+
+## User Skill Detection
+
+Check `<available_skills>` for user-provided skills in these categories. **Prefer the user's own skills** over gstack built-ins when available:
+
+- **Web search:** If the user has a web search skill (e.g. `native-web-search`, `x-research`), prefer it over `gstack-web-search`. Use the `web_search` or `read_web_page` tools directly if available.
+- **Docs & research:** If the user has `context7`, `docs-research`, or similar skills, prefer those for library lookups and documentation.
+- **Observability & debugging:** If the user has error tracking (`sentry-cli`), APM (`newrelic-inspector`), analytics (`posthog-cli`), or data warehouse skills, use them during `/investigate` and `/compound` workflows.
+- **Browser: ALWAYS use gstack's /browse skill** with `agent-browser` (`$AB`). Never use user-provided browser skills (`web-browser`, `agent-browser` standalone, `mcp__claude-in-chrome__*`). The gstack browser has session isolation, cookie management, and ref system integration that other browser tools lack.
+
 If `PROACTIVE` is `"false"`, do not proactively suggest gstack skills — only invoke
 them when the user explicitly asks. The user opted out of proactive suggestions.
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/gstack/gstack-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
+If output shows `UPGRADE_AVAILABLE <old> <new>`: read `$GSTACK_DIR/gstack-upgrade/SKILL.md` (using the `GSTACK_DIR` from the preamble) and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
 
 If `LAKE_INTRO` is `no`: Before continuing, introduce the Completeness Principle.
 Tell the user: "gstack follows the **Boil the Lake** principle — always do the complete
@@ -265,7 +293,7 @@ Read each documentation file and cross-reference it against the diff. Use these 
 - Are workflow descriptions (dev setup, contributor mode, etc.) current?
 - Flag anything that would fail or confuse a first-time contributor.
 
-**CLAUDE.md / project instructions:**
+**AGENTS.md / CLAUDE.md / project instructions:**
 - Does the project structure section match the actual file tree?
 - Are listed commands and scripts accurate?
 - Do build/test instructions match what's in package.json (or equivalent)?
@@ -347,11 +375,11 @@ preserved them. This skill must NEVER do that.
 
 After auditing each file individually, do a cross-doc consistency pass:
 
-1. Does the README's feature/capability list match what CLAUDE.md (or project instructions) describes?
+1. Does the README's feature/capability list match what AGENTS.md or CLAUDE.md (project instructions) describes?
 2. Does ARCHITECTURE's component list match CONTRIBUTING's project structure description?
 3. Does CHANGELOG's latest version match the VERSION file?
-4. **Discoverability:** Is every documentation file reachable from README.md or CLAUDE.md? If
-   ARCHITECTURE.md exists but neither README nor CLAUDE.md links to it, flag it. Every doc
+4. **Discoverability:** Is every documentation file reachable from README.md or AGENTS.md/CLAUDE.md? If
+   ARCHITECTURE.md exists but neither README nor AGENTS.md/CLAUDE.md links to it, flag it. Every doc
    should be discoverable from one of the two entry-point files.
 5. Flag any contradictions between documents. Auto-fix clear factual inconsistencies (e.g., a
    version mismatch). Use AskUserQuestion for narrative contradictions.
@@ -507,6 +535,6 @@ Where status is one of:
 - **Never bump VERSION silently.** Always ask. Even if already bumped, check whether it covers the full scope of changes.
 - **Be explicit about what changed.** Every edit gets a one-line summary.
 - **Generic heuristics, not project-specific.** The audit checks work on any repo.
-- **Discoverability matters.** Every doc file should be reachable from README or CLAUDE.md.
+- **Discoverability matters.** Every doc file should be reachable from README or AGENTS.md/CLAUDE.md.
 - **Voice: friendly, user-forward, not obscure.** Write like you're explaining to a smart person
   who hasn't seen the code.

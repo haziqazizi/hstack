@@ -13,8 +13,8 @@ describe('docs-research and compound skills', () => {
     const content = read('docs-research/SKILL.md');
     expect(content).toContain('Context7');
     expect(content).toContain('gstack-web-search');
-    expect(content).toContain('.claude/research/');
-    expect(content).toContain('.claude/stack.yaml');
+    expect(content).toContain('$AGENT_DIR/research/');
+    expect(content).toContain('$AGENT_DIR/stack.yaml');
     expect(content).toContain('Candidate architectural rules');
   });
 
@@ -23,12 +23,12 @@ describe('docs-research and compound skills', () => {
     for (const section of ['## Trigger', '## Symptom', '## Root cause', '## Proof', '## Human prevention', '## Agent prevention', '### Promotion decision']) {
       expect(content).toContain(section);
     }
-    expect(content).toContain('.claude/compound/incidents/');
-    expect(content).toContain('.claude/compound/patterns/');
+    expect(content).toContain('$AGENT_DIR/compound/incidents/');
+    expect(content).toContain('$AGENT_DIR/compound/patterns/');
     expect(content).toContain('last 8 work sessions or 21 days');
     expect(content).toContain('45-minute gap');
     expect(content).toContain('DESIGN.md');
-    expect(content).toContain('.claude/architecture/rules/<stack>.md');
+    expect(content).toContain('$AGENT_DIR/architecture/rules/<stack>.md');
     expect(content).toContain('Do not reduce everything to incidents');
   });
 });
@@ -40,7 +40,7 @@ describe('workflow skills consume stack, research, and learning artifacts', () =
     expect(content).toContain('Proof first');
     expect(content).toContain('/docs-research');
     expect(content).toContain('/compound');
-    expect(content).toContain('.claude/architecture/rules/');
+    expect(content).toContain('architecture/rules/');
   });
 
   test('review checklist and skill include proof and recurrence prevention', () => {
@@ -54,10 +54,10 @@ describe('workflow skills consume stack, research, and learning artifacts', () =
   test('plan-eng-review reads stack manifest, rule files, research, and compound notes', () => {
     const content = read('plan-eng-review/SKILL.md');
     expect(content).toContain('Stack Context Check');
-    expect(content).toContain('.claude/stack.yaml');
-    expect(content).toContain('.claude/architecture/rules/');
-    expect(content).toContain('.claude/research/');
-    expect(content).toContain('.claude/compound/patterns/');
+    expect(content).toContain('$AGENT_DIR/stack.yaml');
+    expect(content).toContain('$AGENT_DIR/architecture/rules/');
+    expect(content).toContain('$AGENT_DIR/research/');
+    expect(content).toContain('$AGENT_DIR/compound/patterns/');
     expect(content).toContain('Stack rules & research follow-up');
   });
 });

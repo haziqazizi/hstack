@@ -120,8 +120,16 @@ export function detectStacks(projectRoot: string, registry = loadStackRegistry()
   return registry.packs.filter(pack => (pack.detect || []).every(rule => ruleMatches(projectRoot, rule, packageDeps)));
 }
 
+function resolveAgentDir(projectRoot: string): string {
+  const agentsDir = path.join(projectRoot, '.agents');
+  const claudeDir = path.join(projectRoot, '.claude');
+  if (fs.existsSync(agentsDir)) return agentsDir;
+  if (fs.existsSync(claudeDir)) return claudeDir;
+  return agentsDir; // default to .agents for new projects
+}
+
 export function manifestPathFor(projectRoot: string): string {
-  return path.join(projectRoot, '.claude', 'stack.yaml');
+  return path.join(resolveAgentDir(projectRoot), 'stack.yaml');
 }
 
 export function loadStackManifest(projectRoot: string): StackManifest | null {
@@ -143,7 +151,7 @@ function uniqueEntries(entries: StackEntry[]): StackEntry[] {
 
 export function createDefaultManifest(packs: StackPack[]): StackManifest {
   const current = uniqueEntries(packs.map(pack => ({ name: pack.name, role: pack.role })));
-  const activeRuleFiles = current.map(entry => `.claude/architecture/rules/${entry.name}.md`);
+  const activeRuleFiles = current.map(entry => `.agents/architecture/rules/${entry.name}.md`);
   return {
     current,
     proposed: [],
@@ -171,22 +179,25 @@ function ensureDir(dirPath: string) {
 }
 
 function ensureClaudeSection(projectRoot: string): { created: boolean; updated: boolean } {
+  // Prefer AGENTS.md, fallback to CLAUDE.md
+  const agentsPath = path.join(projectRoot, 'AGENTS.md');
   const claudePath = path.join(projectRoot, 'CLAUDE.md');
+  const targetPath = fs.existsSync(agentsPath) ? agentsPath : fs.existsSync(claudePath) ? claudePath : agentsPath;
   const heading = '## Stack-Aware Research & Architecture';
-  const section = `${heading}\n- Use /docs-research before introducing unfamiliar libraries, changing framework behavior, or proposing a new stack.\n- Read .claude/stack.yaml and the relevant files in .claude/architecture/rules/ before touching architecture.\n- For reproducible bugs: write a failing test or equivalent proof first, then fix it, then show the proof passes.\n- After 2 failed fix attempts without new evidence, stop brute forcing and research the docs and existing code.\n- After painful bugs or surprising fixes, run /compound to capture the lesson and decide what should change next time.\n`;
+  const section = `${heading}\n- Use /docs-research before introducing unfamiliar libraries, changing framework behavior, or proposing a new stack.\n- Read the agent config directory's stack.yaml and architecture/rules/ before touching architecture (check .agents/ first, then .claude/).\n- For reproducible bugs: write a failing test or equivalent proof first, then fix it, then show the proof passes.\n- After 2 failed fix attempts without new evidence, stop brute forcing and research the docs and existing code.\n- After painful bugs or surprising fixes, run /compound to capture the lesson and decide what should change next time.\n`;
 
-  if (!fs.existsSync(claudePath)) {
-    fs.writeFileSync(claudePath, `# Claude Guidance\n\n${section}`);
+  if (!fs.existsSync(targetPath)) {
+    fs.writeFileSync(targetPath, `# Agent Guidance\n\n${section}`);
     return { created: true, updated: true };
   }
 
-  const content = fs.readFileSync(claudePath, 'utf-8');
+  const content = fs.readFileSync(targetPath, 'utf-8');
   if (content.includes(heading)) {
     return { created: false, updated: false };
   }
 
   const next = `${content.trimEnd()}\n\n${section}`;
-  fs.writeFileSync(claudePath, `${next.trimEnd()}\n`);
+  fs.writeFileSync(targetPath, `${next.trimEnd()}\n`);
   return { created: false, updated: true };
 }
 
@@ -205,11 +216,12 @@ export function bootstrapProjectStack(projectRoot: string, registry = loadStackR
   const createdManifest = !manifest;
   const effectiveManifest = manifest || createDefaultManifest(detectedPacks);
 
-  ensureDir(path.join(projectRoot, '.claude'));
-  ensureDir(path.join(projectRoot, '.claude', 'research'));
-  ensureDir(path.join(projectRoot, '.claude', 'compound', 'incidents'));
-  ensureDir(path.join(projectRoot, '.claude', 'compound', 'patterns'));
-  ensureDir(path.join(projectRoot, '.claude', 'architecture', 'rules'));
+  const agentDir = resolveAgentDir(projectRoot);
+  ensureDir(agentDir);
+  ensureDir(path.join(agentDir, 'research'));
+  ensureDir(path.join(agentDir, 'compound', 'incidents'));
+  ensureDir(path.join(agentDir, 'compound', 'patterns'));
+  ensureDir(path.join(agentDir, 'architecture', 'rules'));
   ensureDir(path.join(projectRoot, 'docs', 'architecture', 'stacks'));
 
   if (createdManifest) {
@@ -225,7 +237,7 @@ export function bootstrapProjectStack(projectRoot: string, registry = loadStackR
     const pack = packByName.get(stackName);
     if (!pack) continue;
 
-    const rulesPath = path.join(projectRoot, '.claude', 'architecture', 'rules', `${stackName}.md`);
+    const rulesPath = path.join(agentDir, 'architecture', 'rules', `${stackName}.md`);
     if (!fs.existsSync(rulesPath)) {
       const templatePath = path.join(ROOT, 'stacks', 'packs', stackName, 'rules.md.tmpl');
       fs.writeFileSync(rulesPath, renderTemplate(templatePath, pack));
