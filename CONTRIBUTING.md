@@ -9,10 +9,14 @@ gstack skills are Markdown files that Claude Code discovers from a `skills/` dir
 That's what dev mode does. It symlinks your repo into the local `.claude/skills/` directory so Claude Code reads skills straight from your checkout.
 
 ```bash
-git clone <repo> && cd gstack
+git clone https://github.com/haziqazizi/hstack.git && cd hstack
 bun install                    # install dependencies
+npm install -g agent-browser && agent-browser install
 bin/dev-setup                  # activate dev mode
 ```
+
+Even though this repo is a fork, local installs still live at `~/.claude/skills/gstack`
+for compatibility with the skill paths used throughout the prompts and helper scripts.
 
 Now edit any `SKILL.md`, invoke it in Claude Code (e.g. `/review`), and see your changes live. When you're done developing:
 
