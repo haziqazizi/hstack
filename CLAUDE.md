@@ -62,7 +62,7 @@ gstack/
 │   ├── gen-skill-docs.test.ts    # Tier 1: generator quality (free, <1s)
 │   ├── skill-llm-eval.test.ts   # Tier 3: LLM-as-judge (~$0.15/run)
 │   └── skill-e2e.test.ts         # Tier 2: E2E via claude -p (~$3.85/run)
-├── qa-only/         # /qa-only skill (report-only QA, no fixes)
+├── qa-report/       # /qa-report skill (report-only QA, no fixes)
 ├── plan-design-review/  # /plan-design-review skill (report-only design audit)
 ├── design-review/    # /design-review skill (design audit + fix loop)
 ├── ship/            # Ship workflow skill

@@ -61,7 +61,7 @@ describe('gen-skill-docs', () => {
     { dir: '.', name: 'root gstack' },
     { dir: 'browse', name: 'browse' },
     { dir: 'qa', name: 'qa' },
-    { dir: 'qa-only', name: 'qa-only' },
+    { dir: 'qa-report', name: 'qa-report' },
     { dir: 'review', name: 'review' },
     { dir: 'ship', name: 'ship' },
     { dir: 'plan-ceo-review', name: 'plan-ceo-review' },
@@ -186,17 +186,17 @@ describe('gen-skill-docs', () => {
     }
   });
 
-  test('qa and qa-only templates use QA_METHODOLOGY placeholder', () => {
+  test('qa and qa-report templates use QA_METHODOLOGY placeholder', () => {
     const qaTmpl = fs.readFileSync(path.join(ROOT, 'qa', 'SKILL.md.tmpl'), 'utf-8');
     expect(qaTmpl).toContain('{{QA_METHODOLOGY}}');
 
-    const qaOnlyTmpl = fs.readFileSync(path.join(ROOT, 'qa-only', 'SKILL.md.tmpl'), 'utf-8');
+    const qaOnlyTmpl = fs.readFileSync(path.join(ROOT, 'qa-report', 'SKILL.md.tmpl'), 'utf-8');
     expect(qaOnlyTmpl).toContain('{{QA_METHODOLOGY}}');
   });
 
-  test('QA_METHODOLOGY appears expanded in both qa and qa-only generated files', () => {
+  test('QA_METHODOLOGY appears expanded in both qa and qa-report generated files', () => {
     const qaContent = fs.readFileSync(path.join(ROOT, 'qa', 'SKILL.md'), 'utf-8');
-    const qaOnlyContent = fs.readFileSync(path.join(ROOT, 'qa-only', 'SKILL.md'), 'utf-8');
+    const qaOnlyContent = fs.readFileSync(path.join(ROOT, 'qa-report', 'SKILL.md'), 'utf-8');
 
     // Both should contain the health score rubric
     expect(qaContent).toContain('Health Score Rubric');
@@ -217,8 +217,8 @@ describe('gen-skill-docs', () => {
     expect(qaOnlyContent).toContain('Phase 6');
   });
 
-  test('qa-only has no-fix guardrails', () => {
-    const qaOnlyContent = fs.readFileSync(path.join(ROOT, 'qa-only', 'SKILL.md'), 'utf-8');
+  test('qa-report has no-fix guardrails', () => {
+    const qaOnlyContent = fs.readFileSync(path.join(ROOT, 'qa-report', 'SKILL.md'), 'utf-8');
     expect(qaOnlyContent).toContain('Never fix bugs');
     expect(qaOnlyContent).toContain('NEVER fix anything');
     // Should not have Edit, Glob, or Grep in allowed-tools

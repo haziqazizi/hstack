@@ -286,7 +286,7 @@ function generateQAMethodology(_ctx: TemplateContext): string {
 
 ### Diff-aware (automatic when on a feature branch with no URL)
 
-This is the **primary mode** for developers verifying their work. When the user says \`/qa\` without a URL and the repo is on a feature branch, automatically:
+This is the **primary mode** for developers verifying their work. When the user says \`/qa\` or \`/qa-report\` without a URL and the repo is on a feature branch, automatically:
 
 1. **Analyze the branch diff** to understand what changed:
    \`\`\`bash
@@ -374,6 +374,23 @@ $B goto <target-url>
 
 **If CAPTCHA blocks you:** Tell the user: "Please complete the CAPTCHA in the browser, then tell me to continue."
 
+### Phase 2.5: Persona & Coverage Planning
+
+Before browsing deeply, explicitly decide **who you are testing as**, **which states matter**, and **which flows belong to each persona/state combination**. Build a lightweight matrix using, in priority order:
+
+1. The project-scoped test plan artifact from `/plan-eng-review`
+2. User-provided auth/cookie instructions
+3. The branch diff and affected routes
+4. UI clues (login, admin, billing, onboarding, settings, etc.)
+
+Minimum matrix to consider when relevant:
+- **Personas / roles:** visitor, standard member, admin/staff, feature-specific roles
+- **Auth states:** logged out, logged in, expired/pending/blocked
+- **Account/data states:** empty account, populated account, degraded/error state
+- **Case types:** happy path, invalid input, empty state, error state, permission boundary, destructive action, interrupted/stale flow
+
+Write the matrix into the report as you go. If a critical persona or state cannot be tested because credentials, fixtures, or environment are missing, mark it as **Blocked / Untested Coverage** and carry that limitation into the final report.
+
 ### Phase 3: Orient
 
 Get a map of the application:
@@ -458,8 +475,9 @@ $B snapshot -i -a -o "$REPORT_DIR/screenshots/issue-002.png"
 2. **Write "Top 3 Things to Fix"** — the 3 highest-severity issues
 3. **Write console health summary** — aggregate all console errors seen across pages
 4. **Update severity counts** in the summary table
-5. **Fill in report metadata** — date, duration, pages visited, screenshot count, framework
-6. **Save baseline** — write \`baseline.json\` with:
+5. **Fill in persona/state coverage** — which personas, auth states, and account/data states were tested, and which were blocked
+6. **Fill in report metadata** — date, duration, pages visited, screenshot count, framework
+7. **Save baseline** — write \`baseline.json\` with:
    \`\`\`json
    {
      "date": "YYYY-MM-DD",
@@ -558,7 +576,7 @@ Minimum 0 per category.
 9. **Never delete output files.** Screenshots and reports accumulate — that's intentional.
 10. **Use \`snapshot -C\` for tricky UIs.** Finds clickable divs that the accessibility tree misses.
 11. **Show screenshots to the user.** After every \`$B screenshot\`, \`$B snapshot -a -o\`, or \`$B responsive\` command, use the Read tool on the output file(s) so the user can see them inline. For \`responsive\` (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.
-12. **Never refuse to use the browser.** When the user invokes /qa or /qa-only, they are requesting browser-based testing. Never suggest evals, unit tests, or other alternatives as a substitute. Even if the diff appears to have no UI changes, backend changes affect app behavior — always open the browser and test.`;
+12. **Never refuse to use the browser.** When the user invokes /qa or /qa-report, they are requesting browser-based testing. Never suggest evals, unit tests, or other alternatives as a substitute. Even if the diff appears to have no UI changes, backend changes affect app behavior — always open the browser and test.`;
 }
 
 function generateDesignReviewLite(_ctx: TemplateContext): string {
@@ -1192,7 +1210,7 @@ function findTemplates(): string[] {
     path.join(ROOT, 'SKILL.md.tmpl'),
     path.join(ROOT, 'browse', 'SKILL.md.tmpl'),
     path.join(ROOT, 'qa', 'SKILL.md.tmpl'),
-    path.join(ROOT, 'qa-only', 'SKILL.md.tmpl'),
+    path.join(ROOT, 'qa-report', 'SKILL.md.tmpl'),
     path.join(ROOT, 'setup-browser-cookies', 'SKILL.md.tmpl'),
     path.join(ROOT, 'ship', 'SKILL.md.tmpl'),
     path.join(ROOT, 'review', 'SKILL.md.tmpl'),

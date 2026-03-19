@@ -9,7 +9,7 @@ description: |
   Proactively suggest when the user says a feature is ready for testing
   or asks "does this work?". Three tiers: Quick (critical/high only),
   Standard (+ medium), Exhaustive (+ cosmetic). Produces before/after health scores,
-  fix evidence, and a ship-readiness summary. For report-only mode, use /qa-only.
+  fix evidence, and a ship-readiness summary. For report-only mode, use /qa-report.
 allowed-tools:
   - Bash
   - Read
@@ -18,10 +18,11 @@ allowed-tools:
   - Glob
   - Grep
   - AskUserQuestion
-  - WebSearch
 ---
 
 {{PREAMBLE}}
+
+{{WEB_SEARCH_GUIDANCE}}
 
 {{BASE_BRANCH_DETECT}}
 
@@ -67,7 +68,7 @@ RECOMMENDATION: Choose A because uncommitted work should be preserved as a commi
 
 After the user chooses, execute their choice (commit or stash), then continue with setup.
 
-**Find the browse binary:**
+**Find agent-browser:**
 
 {{BROWSE_SETUP}}
 
@@ -174,10 +175,12 @@ git commit -m "fix(qa): ISSUE-NNN — short description"
 - Use `snapshot -D` to verify the change had the expected effect
 
 ```bash
-$B goto <affected-url>
-$B screenshot "$REPORT_DIR/screenshots/issue-NNN-after.png"
-$B console --errors
-$B snapshot -D
+$AB open <affected-url>
+$AB screenshot "$REPORT_DIR/screenshots/issue-NNN-after.png"
+$AB errors
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+# If needed, diff against a saved baseline snapshot:
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
 ```
 
 ### 8e. Classify

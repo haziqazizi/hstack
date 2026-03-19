@@ -49,6 +49,35 @@
 | Low | 0 |
 | **Total** | **0** |
 
+## Coverage Matrix
+
+| Persona | Auth State | Account/Data State | Flows Tested | Status |
+|--------|------------|--------------------|--------------|--------|
+| Visitor | logged out | n/a | landing, signup, auth guards | tested / blocked / skipped |
+| Member | logged in | populated | dashboard, checkout | tested / blocked / skipped |
+
+## Personas & States Tested
+
+### Personas Tested
+- Visitor / logged-out user
+- Standard member
+- Admin / staff
+
+### Auth States Tested
+- Logged out
+- Logged in
+- Expired / pending / blocked
+
+### Account / Data States Tested
+- Empty account
+- Populated account
+- Error / degraded state
+
+## Blocked / Untested Coverage
+
+- {Persona or state} — {why it was not tested}
+- {Persona or state} — {missing credentials / missing fixture / environment limitation}
+
 ## Issues
 
 ### ISSUE-001: {Short title}

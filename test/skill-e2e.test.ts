@@ -1248,27 +1248,27 @@ Analyze the git history and produce the narrative report as described in the SKI
   }, 420_000);
 });
 
-// --- QA-Only E2E (report-only, no fixes) ---
+// --- QA-Report E2E (report-only, no fixes) ---
 
-describeIfSelected('QA-Only skill E2E', ['qa-only-no-fix'], () => {
+describeIfSelected('QA-Report skill E2E', ['qa-report-no-fix'], () => {
   let qaOnlyDir: string;
 
   beforeAll(() => {
     testServer = testServer || startTestServer();
-    qaOnlyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-qa-only-'));
+    qaOnlyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-qa-report-'));
     setupBrowseShims(qaOnlyDir);
 
-    // Copy qa-only skill files
-    copyDirSync(path.join(ROOT, 'qa-only'), path.join(qaOnlyDir, 'qa-only'));
+    // Copy qa-report skill files
+    copyDirSync(path.join(ROOT, 'qa-report'), path.join(qaOnlyDir, 'qa-report'));
 
-    // Copy qa templates (qa-only references qa/templates/qa-report-template.md)
+    // Copy qa templates (qa-report references qa/templates/qa-report-template.md)
     fs.mkdirSync(path.join(qaOnlyDir, 'qa', 'templates'), { recursive: true });
     fs.copyFileSync(
       path.join(ROOT, 'qa', 'templates', 'qa-report-template.md'),
       path.join(qaOnlyDir, 'qa', 'templates', 'qa-report-template.md'),
     );
 
-    // Init git repo (qa-only checks for feature branch in diff-aware mode)
+    // Init git repo (qa-report checks for feature branch in diff-aware mode)
     const { spawnSync } = require('child_process');
     const run = (cmd: string, args: string[]) =>
       spawnSync(cmd, args, { cwd: qaOnlyDir, stdio: 'pipe', timeout: 5000 });
@@ -1285,36 +1285,36 @@ describeIfSelected('QA-Only skill E2E', ['qa-only-no-fix'], () => {
     try { fs.rmSync(qaOnlyDir, { recursive: true, force: true }); } catch {}
   });
 
-  test('/qa-only produces report without using Edit tool', async () => {
+  test('/qa-report produces report without using Edit tool', async () => {
     const result = await runSkillTest({
       prompt: `IMPORTANT: The browse binary is already assigned below as B. Do NOT search for it or run the SKILL.md setup block — just use $B directly.
 
 B="${browseBin}"
 
-Read the file qa-only/SKILL.md for the QA-only workflow instructions.
+Read the file qa-report/SKILL.md for the QA-report workflow instructions.
 
 Run a Quick QA test on ${testServer.url}/qa-eval.html
 Do NOT use AskUserQuestion — run Quick tier directly.
-Write your report to ${qaOnlyDir}/qa-reports/qa-only-report.md`,
+Write your report to ${qaOnlyDir}/qa-reports/qa-report.md`,
       workingDirectory: qaOnlyDir,
       maxTurns: 35,
       allowedTools: ['Bash', 'Read', 'Write', 'Glob'],  // NO Edit — the critical guardrail
       timeout: 180_000,
-      testName: 'qa-only-no-fix',
+      testName: 'qa-report-no-fix',
       runId,
     });
 
-    logCost('/qa-only', result);
+    logCost('/qa-report', result);
 
     // Verify Edit was not used — the critical guardrail for report-only mode.
     // Glob is read-only and may be used for file discovery (e.g. finding SKILL.md).
     const editCalls = result.toolCalls.filter(tc => tc.tool === 'Edit');
     if (editCalls.length > 0) {
-      console.warn('qa-only used Edit tool:', editCalls.length, 'times');
+      console.warn('qa-report used Edit tool:', editCalls.length, 'times');
     }
 
     const exitOk = ['success', 'error_max_turns'].includes(result.exitReason);
-    recordE2E('/qa-only no-fix', 'QA-Only skill E2E', result, {
+    recordE2E('/qa-report no-fix', 'QA-Report skill E2E', result, {
       passed: exitOk && editCalls.length === 0,
     });
 

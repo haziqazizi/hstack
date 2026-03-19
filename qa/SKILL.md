@@ -9,7 +9,7 @@ description: |
   Proactively suggest when the user says a feature is ready for testing
   or asks "does this work?". Three tiers: Quick (critical/high only),
   Standard (+ medium), Exhaustive (+ cosmetic). Produces before/after health scores,
-  fix evidence, and a ship-readiness summary. For report-only mode, use /qa-only.
+  fix evidence, and a ship-readiness summary. For report-only mode, use /qa-report.
 allowed-tools:
   - Bash
   - Read
@@ -18,7 +18,6 @@ allowed-tools:
   - Glob
   - Grep
   - AskUserQuestion
-  - WebSearch
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
 <!-- Regenerate: bun run gen:skill-docs -->
@@ -39,6 +38,8 @@ echo "BRANCH: $_BRANCH"
 echo "PROACTIVE: $_PROACTIVE"
 _LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
+_EXA=$(~/.claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || .claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || echo "EXA_MISSING")
+echo "EXA_SEARCH: $_EXA"
 mkdir -p ~/.gstack/analytics
 echo '{"skill":"qa","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```
@@ -103,7 +104,7 @@ If `_CONTRIB` is `true`: you are in **contributor mode**. You're a gstack user w
 
 **At the end of each major workflow step** (not after every single command), reflect on the gstack tooling you used. Rate your experience 0 to 10. If it wasn't a 10, think about why. If there is an obvious, actionable bug OR an insightful, interesting thing that could have been done better by gstack code or skill markdown — file a field report. Maybe our contributor will help make us better!
 
-**Calibration — this is the bar:** For example, `$B js "await fetch(...)"` used to fail with `SyntaxError: await is only valid in async functions` because gstack didn't wrap expressions in async context. Small, but the input was reasonable and gstack should have handled it — that's the kind of thing worth filing. Things less consequential than this, ignore.
+**Calibration — this is the bar:** For example, `$AB eval 'await fetch(...)'` fails with `SyntaxError: await is only valid in async functions` because agent-browser doesn't wrap expressions in async context. Small, but the input was reasonable and gstack should have documented the right `eval --stdin` pattern — that's the kind of thing worth filing. Things less consequential than this, ignore.
 
 **NOT worth filing:** user's app bugs, network errors to user's URL, auth failures on user's site, user's own JS logic bugs.
 
@@ -158,6 +159,29 @@ REASON: [1-2 sentences]
 ATTEMPTED: [what you tried]
 RECOMMENDATION: [what the user should do next]
 ```
+
+## Web Search (Exa)
+
+If the preamble printed `EXA_SEARCH: EXA_READY`, Exa web search is available. Use the gstack CLI for all web research:
+
+**Search the web:**
+```bash
+~/.claude/skills/gstack/bin/gstack-web-search "your search query"
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --results 10
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --contents          # include full page text
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --category news     # filter: company, research paper, news, pdf, github, tweet, personal site
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --domain github.com # restrict to domain
+```
+
+**Read a specific URL:**
+```bash
+~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page"
+~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page" --max-chars 20000
+```
+
+If `EXA_SEARCH: EXA_MISSING`, web search is not configured. Tell the user:
+"Web search is not available — run \`./setup\` in the gstack directory to add your Exa API key, or add it manually: \`echo 'EXA_API_KEY=your-key' >> ~/.gstack/.env\`"
+Then continue without web search — use local docs and Context7 only.
 
 ## Step 0: Detect base branch
 
@@ -220,26 +244,39 @@ RECOMMENDATION: Choose A because uncommitted work should be preserved as a commi
 
 After the user chooses, execute their choice (commit or stash), then continue with setup.
 
-**Find the browse binary:**
+**Find agent-browser:**
 
 ## SETUP (run this check BEFORE any browse command)
 
 ```bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B=~/.claude/skills/gstack/browse/dist/browse
-if [ -x "$B" ]; then
-  echo "READY: $B"
+if command -v agent-browser >/dev/null 2>&1; then
+  _AB_VER=$(agent-browser --version 2>/dev/null | awk '{print $2}')
+  case "$_AB_VER" in
+    0.15.*|0.16.*|0.17.*|1.*)
+      AB="agent-browser --session gstack-$PPID"
+      GCI=~/.claude/skills/gstack/bin/gstack-cookie-import
+      [ -x "$GCI" ] || GCI=.claude/skills/gstack/bin/gstack-cookie-import
+      $AB close >/dev/null 2>&1 || true
+      echo "READY: $AB"
+      ;;
+    *)
+      echo "NEEDS_UPDATE: $_AB_VER"
+      ;;
+  esac
 else
   echo "NEEDS_SETUP"
 fi
 ```
 
 If `NEEDS_SETUP`:
-1. Tell the user: "gstack browse needs a one-time build (~10 seconds). OK to proceed?" Then STOP and wait.
-2. Run: `cd <SKILL_DIR> && ./setup`
-3. If `bun` is not installed: `curl -fsSL https://bun.sh/install | bash`
+1. Tell the user: "agent-browser needs a one-time install. OK to proceed?" Then STOP and wait.
+2. Run: `npm install -g agent-browser && agent-browser install`
+
+If `NEEDS_UPDATE <version>`:
+1. Tell the user: "gstack expects agent-browser 0.15.x+ but found <version>. OK to update?" Then STOP and wait.
+2. Run: `npm install -g agent-browser@latest && agent-browser install`
+
+When setup succeeds, use `$AB <command>` in subsequent bash blocks.
 
 **Check test framework (bootstrap if needed):**
 
@@ -282,11 +319,11 @@ If user picks H → write `.gstack/no-test-bootstrap` and continue without tests
 
 ### B2. Research best practices
 
-Use WebSearch to find current best practices for the detected runtime:
+Use `gstack-web-search` to find current best practices for the detected runtime:
 - `"[runtime] best test framework 2025 2026"`
 - `"[framework A] vs [framework B] comparison"`
 
-If WebSearch is unavailable, use this built-in knowledge table:
+If Exa web search is unavailable (EXA_MISSING), use this built-in knowledge table:
 
 | Runtime | Primary recommendation | Alternative |
 |---------|----------------------|-------------|
@@ -424,7 +461,7 @@ Before falling back to git diff heuristics, check for richer test plan sources:
 
 ### Diff-aware (automatic when on a feature branch with no URL)
 
-This is the **primary mode** for developers verifying their work. When the user says `/qa` without a URL and the repo is on a feature branch, automatically:
+This is the **primary mode** for developers verifying their work. When the user says `/qa` or `/qa-report` without a URL and the repo is on a feature branch, automatically:
 
 1. **Analyze the branch diff** to understand what changed:
    ```bash
@@ -437,16 +474,18 @@ This is the **primary mode** for developers verifying their work. When the user 
    - View/template/component files → which pages render them
    - Model/service files → which pages use those models (check controllers that reference them)
    - CSS/style files → which pages include those stylesheets
-   - API endpoints → test them directly with `$B js "await fetch('/api/...')"`
+   - API endpoints → test them directly with `$AB eval --stdin <<'EVALEOF'
+(async () => { const r = await fetch('/api/...'); return { status: r.status, body: await r.text() }; })()
+EVALEOF`
    - Static pages (markdown, HTML) → navigate to them directly
 
    **If no obvious pages/routes are identified from the diff:** Do not skip browser testing. The user invoked /qa because they want browser-based verification. Fall back to Quick mode — navigate to the homepage, follow the top 5 navigation targets, check console for errors, and test any interactive elements found. Backend, config, and infrastructure changes affect app behavior — always verify the app still works.
 
 3. **Detect the running app** — check common local dev ports:
    ```bash
-   $B goto http://localhost:3000 2>/dev/null && echo "Found app on :3000" || \
-   $B goto http://localhost:4000 2>/dev/null && echo "Found app on :4000" || \
-   $B goto http://localhost:8080 2>/dev/null && echo "Found app on :8080"
+   $AB open http://localhost:3000 2>/dev/null && echo "Found app on :3000" || \
+   $AB open http://localhost:4000 2>/dev/null && echo "Found app on :4000" || \
+   $AB open http://localhost:8080 2>/dev/null && echo "Found app on :8080"
    ```
    If no local app is found, check for a staging/preview URL in the PR or environment. If nothing works, ask the user for the URL.
 
@@ -455,7 +494,7 @@ This is the **primary mode** for developers verifying their work. When the user 
    - Take a screenshot
    - Check console for errors
    - If the change was interactive (forms, buttons, flows), test the interaction end-to-end
-   - Use `snapshot -D` before and after actions to verify the change had the expected effect
+   - Use a before/after snapshot diff shim to verify the change had the expected effect
 
 5. **Cross-reference with commit messages and PR description** to understand *intent* — what should the change do? Verify it actually does that.
 
@@ -483,7 +522,7 @@ Run full mode, then load `baseline.json` from a previous run. Diff: which issues
 
 ### Phase 1: Initialize
 
-1. Find browse binary (see Setup above)
+1. Find agent-browser (see Setup above)
 2. Create output directories
 3. Copy report template from `qa/templates/qa-report-template.md` to output dir
 4. Start timer for duration tracking
@@ -493,34 +532,60 @@ Run full mode, then load `baseline.json` from a previous run. Diff: which issues
 **If the user specified auth credentials:**
 
 ```bash
-$B goto <login-url>
-$B snapshot -i                    # find the login form
-$B fill @e3 "user@example.com"
-$B fill @e4 "[REDACTED]"         # NEVER include real passwords in report
-$B click @e5                      # submit
-$B snapshot -D                    # verify login succeeded
+$AB open <login-url>
+$AB snapshot -i                   # find the login form
+$AB fill @e3 "user@example.com"
+$AB fill @e4 "[REDACTED]"        # NEVER include real passwords in report
+$AB click @e5                     # submit
+$AB snapshot -i > .gstack/snap-$PPID-after-login.txt
+```
+
+If you need a diff, save a baseline snapshot before clicking and run:
+```bash
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after-login.txt || true
 ```
 
 **If the user provided a cookie file:**
 
 ```bash
-$B cookie-import cookies.json
-$B goto <target-url>
+$AB close
+$AB state load cookies.json
+$AB open <target-url>
 ```
 
 **If 2FA/OTP is required:** Ask the user for the code and wait.
 
 **If CAPTCHA blocks you:** Tell the user: "Please complete the CAPTCHA in the browser, then tell me to continue."
 
+### Phase 2.5: Persona & Coverage Planning
+
+Before browsing deeply, explicitly decide **who you are testing as**, **which states matter**, and **which flows belong to each persona/state combination**. Build a lightweight matrix using, in priority order:
+
+1. The project-scoped test plan artifact from `/plan-eng-review`
+2. User-provided auth/cookie instructions
+3. The branch diff and affected routes
+4. UI clues (login, admin, billing, onboarding, settings, etc.)
+
+Minimum matrix to consider when relevant:
+- **Personas / roles:** visitor, standard member, admin/staff, feature-specific roles
+- **Auth states:** logged out, logged in, expired/pending/blocked
+- **Account/data states:** empty account, populated account, degraded/error state
+- **Case types:** happy path, invalid input, empty state, error state, permission boundary, destructive action, interrupted/stale flow
+
+Write the matrix into the report as you go. If a critical persona or state cannot be tested because credentials, fixtures, or environment are missing, mark it as **Blocked / Untested Coverage** and carry that limitation into the final report.
+
 ### Phase 3: Orient
 
 Get a map of the application:
 
 ```bash
-$B goto <target-url>
-$B snapshot -i -a -o "$REPORT_DIR/screenshots/initial.png"
-$B links                          # map navigation structure
-$B console --errors               # any errors on landing?
+$AB open <target-url>
+$AB screenshot --annotate "$REPORT_DIR/screenshots/initial.png"
+$AB snapshot -i
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify(Array.from(document.querySelectorAll('a')).map(a => ({ text: (a.textContent || '').trim(), href: a.href })))
+EVALEOF
+$AB errors
 ```
 
 **Detect framework** (note in report metadata):
@@ -536,9 +601,10 @@ $B console --errors               # any errors on landing?
 Visit pages systematically. At each page:
 
 ```bash
-$B goto <page-url>
-$B snapshot -i -a -o "$REPORT_DIR/screenshots/page-name.png"
-$B console --errors
+$AB open <page-url>
+$AB screenshot --annotate "$REPORT_DIR/screenshots/page-name.png"
+$AB snapshot -i
+$AB errors
 ```
 
 Then follow the **per-page exploration checklist** (see `qa/references/issue-taxonomy.md`):
@@ -551,9 +617,9 @@ Then follow the **per-page exploration checklist** (see `qa/references/issue-tax
 6. **Console** — Any new JS errors after interactions?
 7. **Responsiveness** — Check mobile viewport if relevant:
    ```bash
-   $B viewport 375x812
-   $B screenshot "$REPORT_DIR/screenshots/page-mobile.png"
-   $B viewport 1280x720
+   $AB set viewport 375 812
+   $AB screenshot "$REPORT_DIR/screenshots/page-mobile.png"
+   $AB set viewport 1280 720
    ```
 
 **Depth judgment:** Spend more time on core features (homepage, dashboard, checkout, search) and less on secondary pages (about, terms, privacy).
@@ -570,14 +636,16 @@ Document each issue **immediately when found** — don't batch them.
 1. Take a screenshot before the action
 2. Perform the action
 3. Take a screenshot showing the result
-4. Use `snapshot -D` to show what changed
+4. Use a before/after snapshot diff shim to show what changed
 5. Write repro steps referencing screenshots
 
 ```bash
-$B screenshot "$REPORT_DIR/screenshots/issue-001-step-1.png"
-$B click @e5
-$B screenshot "$REPORT_DIR/screenshots/issue-001-result.png"
-$B snapshot -D
+$AB screenshot "$REPORT_DIR/screenshots/issue-001-step-1.png"
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+$AB click @e5
+$AB screenshot "$REPORT_DIR/screenshots/issue-001-result.png"
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
 ```
 
 **Static bugs** (typos, layout issues, missing images):
@@ -585,7 +653,8 @@ $B snapshot -D
 2. Describe what's wrong
 
 ```bash
-$B snapshot -i -a -o "$REPORT_DIR/screenshots/issue-002.png"
+$AB screenshot --annotate "$REPORT_DIR/screenshots/issue-002.png"
+$AB snapshot -i
 ```
 
 **Write each issue to the report immediately** using the template format from `qa/templates/qa-report-template.md`.
@@ -596,8 +665,9 @@ $B snapshot -i -a -o "$REPORT_DIR/screenshots/issue-002.png"
 2. **Write "Top 3 Things to Fix"** — the 3 highest-severity issues
 3. **Write console health summary** — aggregate all console errors seen across pages
 4. **Update severity counts** in the summary table
-5. **Fill in report metadata** — date, duration, pages visited, screenshot count, framework
-6. **Save baseline** — write `baseline.json` with:
+5. **Fill in persona/state coverage** — which personas, auth states, and account/data states were tested, and which were blocked
+6. **Fill in report metadata** — date, duration, pages visited, screenshot count, framework
+7. **Save baseline** — write `baseline.json` with:
    ```json
    {
      "date": "YYYY-MM-DD",
@@ -695,8 +765,8 @@ Minimum 0 per category.
 8. **Depth over breadth.** 5-10 well-documented issues with evidence > 20 vague descriptions.
 9. **Never delete output files.** Screenshots and reports accumulate — that's intentional.
 10. **Use `snapshot -C` for tricky UIs.** Finds clickable divs that the accessibility tree misses.
-11. **Show screenshots to the user.** After every `$B screenshot`, `$B snapshot -a -o`, or `$B responsive` command, use the Read tool on the output file(s) so the user can see them inline. For `responsive` (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.
-12. **Never refuse to use the browser.** When the user invokes /qa or /qa-only, they are requesting browser-based testing. Never suggest evals, unit tests, or other alternatives as a substitute. Even if the diff appears to have no UI changes, backend changes affect app behavior — always open the browser and test.
+11. **Show screenshots to the user.** After every `$AB screenshot`, `$AB screenshot --annotate`, or manual responsive screenshot sequence, use the Read tool on the output PNG(s) so the user can see them inline. For responsive checks (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.
+12. **Never refuse to use the browser.** When the user invokes /qa or /qa-report, they are requesting browser-based testing. Never suggest evals, unit tests, or other alternatives as a substitute. Even if the diff appears to have no UI changes, backend changes affect app behavior — always open the browser and test.
 
 Record baseline health score at end of Phase 6.
 
@@ -771,10 +841,12 @@ git commit -m "fix(qa): ISSUE-NNN — short description"
 - Use `snapshot -D` to verify the change had the expected effect
 
 ```bash
-$B goto <affected-url>
-$B screenshot "$REPORT_DIR/screenshots/issue-NNN-after.png"
-$B console --errors
-$B snapshot -D
+$AB open <affected-url>
+$AB screenshot "$REPORT_DIR/screenshots/issue-NNN-after.png"
+$AB errors
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+# If needed, diff against a saved baseline snapshot:
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
 ```
 
 ### 8e. Classify

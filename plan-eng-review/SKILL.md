@@ -35,6 +35,8 @@ echo "BRANCH: $_BRANCH"
 echo "PROACTIVE: $_PROACTIVE"
 _LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
+_EXA=$(~/.claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || .claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || echo "EXA_MISSING")
+echo "EXA_SEARCH: $_EXA"
 mkdir -p ~/.gstack/analytics
 echo '{"skill":"plan-eng-review","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```
@@ -99,7 +101,7 @@ If `_CONTRIB` is `true`: you are in **contributor mode**. You're a gstack user w
 
 **At the end of each major workflow step** (not after every single command), reflect on the gstack tooling you used. Rate your experience 0 to 10. If it wasn't a 10, think about why. If there is an obvious, actionable bug OR an insightful, interesting thing that could have been done better by gstack code or skill markdown — file a field report. Maybe our contributor will help make us better!
 
-**Calibration — this is the bar:** For example, `$B js "await fetch(...)"` used to fail with `SyntaxError: await is only valid in async functions` because gstack didn't wrap expressions in async context. Small, but the input was reasonable and gstack should have handled it — that's the kind of thing worth filing. Things less consequential than this, ignore.
+**Calibration — this is the bar:** For example, `$AB eval 'await fetch(...)'` fails with `SyntaxError: await is only valid in async functions` because agent-browser doesn't wrap expressions in async context. Small, but the input was reasonable and gstack should have documented the right `eval --stdin` pattern — that's the kind of thing worth filing. Things less consequential than this, ignore.
 
 **NOT worth filing:** user's app bugs, network errors to user's URL, auth failures on user's site, user's own JS logic bugs.
 
@@ -155,6 +157,29 @@ ATTEMPTED: [what you tried]
 RECOMMENDATION: [what the user should do next]
 ```
 
+## Web Search (Exa)
+
+If the preamble printed `EXA_SEARCH: EXA_READY`, Exa web search is available. Use the gstack CLI for all web research:
+
+**Search the web:**
+```bash
+~/.claude/skills/gstack/bin/gstack-web-search "your search query"
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --results 10
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --contents          # include full page text
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --category news     # filter: company, research paper, news, pdf, github, tweet, personal site
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --domain github.com # restrict to domain
+```
+
+**Read a specific URL:**
+```bash
+~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page"
+~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page" --max-chars 20000
+```
+
+If `EXA_SEARCH: EXA_MISSING`, web search is not configured. Tell the user:
+"Web search is not available — run \`./setup\` in the gstack directory to add your Exa API key, or add it manually: \`echo 'EXA_API_KEY=your-key' >> ~/.gstack/.env\`"
+Then continue without web search — use local docs and Context7 only.
+
 # Plan Review Mode
 
 Review this plan thoroughly before making any code changes. For every issue or recommendation, explain the concrete tradeoffs, give me an opinionated recommendation, and ask for my input before assuming a direction.
@@ -208,6 +233,21 @@ DESIGN=$(ls -t ~/.gstack/projects/$SLUG/*-$BRANCH-design-*.md 2>/dev/null | head
 [ -n "$DESIGN" ] && echo "Design doc found: $DESIGN" || echo "No design doc found"
 ```
 If a design doc exists, read it. Use it as the source of truth for the problem statement, constraints, and chosen approach. If it has a `Supersedes:` field, note that this is a revised design — check the prior version for context on what changed and why.
+
+### Stack Context Check
+
+Before Step 0, read the repository's stack context if it exists:
+
+```bash
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+~/.claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || .claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || true
+```
+
+1. Read `.claude/stack.yaml` if present.
+2. Read the relevant files in `.claude/architecture/rules/` for the detected or proposed stacks.
+3. Read the most relevant memos in `.claude/research/` and patterns in `.claude/compound/patterns/`.
+4. If the plan introduces a new framework, major version jump, or architecture pattern and there is no recent research memo covering it, do the research now: use local docs first, then Context7/`gstack-web-search` guidance via `/docs-research` or equivalent inline research before approving the plan.
+5. If the stack manifest or rule files are missing for a clearly detected stack, note that they should be scaffolded or updated as part of the plan output.
 
 ### Step 0: Scope Challenge
 Before reviewing anything, answer these questions:
@@ -281,7 +321,7 @@ For LLM/prompt changes: check the "Prompt/LLM changes" file patterns listed in C
 
 ### Test Plan Artifact
 
-After producing the test diagram, write a test plan artifact to the project directory so `/qa` and `/qa-only` can consume it as primary test input (replacing the lossy git-diff heuristic):
+After producing the test diagram, write a test plan artifact to the project directory so `/qa` and `/qa-report` can consume it as primary test input (replacing the lossy git-diff heuristic):
 
 ```bash
 source <(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null) && mkdir -p ~/.gstack/projects/$SLUG
@@ -300,17 +340,26 @@ Repo: {owner/repo}
 ## Affected Pages/Routes
 - {URL path} — {what to test and why}
 
+## Personas / Auth States
+- {persona or role} — {logged out / member / admin / etc.} — {what to verify}
+
+## Account / Data States
+- {state} — {empty account / populated account / expired / suspended / etc.} — {why it matters}
+
 ## Key Interactions to Verify
 - {interaction description} on {page}
 
 ## Edge Cases
 - {edge case} on {page}
 
-## Critical Paths
-- {end-to-end flow that must work}
+## Critical Paths by Persona
+- {persona}: {end-to-end flow that must work}
+
+## Coverage Risks / Blockers
+- {persona or state not testable} — {what is missing}
 ```
 
-This file is consumed by `/qa` and `/qa-only` as primary test input. Include only the information that helps a QA tester know **what to test and where** — not implementation details.
+This file is consumed by `/qa` and `/qa-report` as primary test input. Include only the information that helps a QA tester know **what to test, as whom, and in which states** — not implementation details.
 
 ### 4. Performance review
 Evaluate:
@@ -338,6 +387,15 @@ Every plan review MUST produce a "NOT in scope" section listing work that was co
 
 ### "What already exists" section
 List existing code/flows that already partially solve sub-problems in this plan, and whether the plan reuses them or unnecessarily rebuilds them.
+
+### Stack rules & research follow-up
+List which stack-aware artifacts should change because of this plan:
+- `.claude/stack.yaml`
+- `.claude/architecture/rules/<stack>.md`
+- `docs/architecture/stacks/<stack>.md`
+- `.claude/research/<memo>.md`
+
+If no stack-aware artifact changes are needed, say so explicitly.
 
 ### TODOS.md updates
 After all review sections are complete, present each potential TODO as its own individual AskUserQuestion. Never batch TODOs — one per question. Never silently skip this step. Follow the format in `.claude/skills/review/TODOS-format.md`.

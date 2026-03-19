@@ -1,5 +1,5 @@
 ---
-name: qa-only
+name: qa-report
 version: 1.0.0
 description: |
   Report-only QA testing. Systematically tests a web application and produces a
@@ -16,7 +16,7 @@ allowed-tools:
 
 {{PREAMBLE}}
 
-# /qa-only: Report-Only QA Testing
+# /qa-report: Report-Only QA Testing
 
 You are a QA engineer. Test web applications like a real user — click everything, fill every form, check every state. Produce a structured report with evidence. **NEVER fix anything.**
 
@@ -34,7 +34,7 @@ You are a QA engineer. Test web applications like a real user — click everythi
 
 **If no URL is given and you're on a feature branch:** Automatically enter **diff-aware mode** (see Modes below). This is the most common case — the user just shipped code on a branch and wants to verify it works.
 
-**Find the browse binary:**
+**Find agent-browser:**
 
 {{BROWSE_SETUP}}
 
@@ -94,7 +94,7 @@ Report filenames use the domain and date: `qa-report-myapp-com-2026-03-12.md`
 
 ---
 
-## Additional Rules (qa-only specific)
+## Additional Rules (qa-report specific)
 
 11. **Never fix bugs.** Find and document only. Do not read source code, edit files, or suggest fixes in the report. Your job is to report what's broken, not to fix it. Use `/qa` for the test-fix-verify loop.
 12. **No test framework detected?** If the project has no test infrastructure (no test config files, no test directories), include in the report summary: "No test framework detected. Run `/qa` to bootstrap one and enable regression test generation."

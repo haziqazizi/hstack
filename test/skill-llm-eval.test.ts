@@ -682,7 +682,7 @@ describeIfSelected('Design skill evals', ['design-review/SKILL.md fix loop', 'de
 
 // Block 4: Other skills
 describeIfSelected('Other skill evals', [
-  'retro/SKILL.md instructions', 'qa-only/SKILL.md workflow', 'gstack-upgrade/SKILL.md upgrade flow',
+  'retro/SKILL.md instructions', 'qa-report/SKILL.md workflow', 'gstack-upgrade/SKILL.md upgrade flow',
 ], () => {
   testIfSelected('retro/SKILL.md instructions', async () => {
     await runWorkflowJudge({
@@ -696,11 +696,11 @@ describeIfSelected('Other skill evals', [
     });
   }, 30_000);
 
-  testIfSelected('qa-only/SKILL.md workflow', async () => {
+  testIfSelected('qa-report/SKILL.md workflow', async () => {
     await runWorkflowJudge({
-      testName: 'qa-only/SKILL.md workflow',
+      testName: 'qa-report/SKILL.md workflow',
       suite: 'Other skill evals',
-      skillPath: 'qa-only/SKILL.md',
+      skillPath: 'qa-report/SKILL.md',
       startMarker: '## Workflow',
       endMarker: '## Important Rules',
       judgeContext: 'a report-only QA testing workflow',

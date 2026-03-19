@@ -44,15 +44,15 @@ describe('SKILL.md command validation', () => {
     expect(result.snapshotFlagErrors).toHaveLength(0);
   });
 
-  test('all $B commands in qa-only/SKILL.md are valid browse commands', () => {
-    const qaOnlySkill = path.join(ROOT, 'qa-only', 'SKILL.md');
+  test('all $B commands in qa-report/SKILL.md are valid browse commands', () => {
+    const qaOnlySkill = path.join(ROOT, 'qa-report', 'SKILL.md');
     if (!fs.existsSync(qaOnlySkill)) return;
     const result = validateSkill(qaOnlySkill);
     expect(result.invalid).toHaveLength(0);
   });
 
-  test('all snapshot flags in qa-only/SKILL.md are valid', () => {
-    const qaOnlySkill = path.join(ROOT, 'qa-only', 'SKILL.md');
+  test('all snapshot flags in qa-report/SKILL.md are valid', () => {
+    const qaOnlySkill = path.join(ROOT, 'qa-report', 'SKILL.md');
     if (!fs.existsSync(qaOnlySkill)) return;
     const result = validateSkill(qaOnlySkill);
     expect(result.snapshotFlagErrors).toHaveLength(0);
@@ -213,7 +213,7 @@ describe('Generated SKILL.md freshness', () => {
 describe('Update check preamble', () => {
   const skillsWithUpdateCheck = [
     'SKILL.md', 'browse/SKILL.md', 'qa/SKILL.md',
-    'qa-only/SKILL.md',
+    'qa-report/SKILL.md',
     'setup-browser-cookies/SKILL.md',
     'ship/SKILL.md', 'review/SKILL.md',
     'plan-ceo-review/SKILL.md', 'plan-eng-review/SKILL.md',
@@ -401,6 +401,25 @@ describe('QA skill structure validation', () => {
     expect(qaContent).toContain('screenshots/');
     expect(qaContent).toContain('.gstack/qa-reports/');
   });
+
+
+  test('qa/SKILL.md includes persona and state planning', () => {
+    expect(qaContent).toContain('Persona & Coverage Planning');
+    expect(qaContent).toContain('who you are testing as');
+    expect(qaContent).toContain('Blocked / Untested Coverage');
+    expect(qaContent).toContain('account/data states');
+  });
+});
+
+describe('Plan-eng-review test plan artifact', () => {
+  test('plan-eng-review/SKILL.md writes persona-aware QA artifacts', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'plan-eng-review', 'SKILL.md'), 'utf-8');
+    expect(content).toContain('## Personas / Auth States');
+    expect(content).toContain('## Account / Data States');
+    expect(content).toContain('## Critical Paths by Persona');
+    expect(content).toContain('## Coverage Risks / Blockers');
+    expect(content).toContain('/qa-report');
+  });
 });
 
 // --- Part 7: Greptile history format consistency (A3) ---
@@ -525,7 +544,7 @@ describe('TODOS-format.md reference consistency', () => {
 describe('v0.4.1 preamble features', () => {
   const skillsWithPreamble = [
     'SKILL.md', 'browse/SKILL.md', 'qa/SKILL.md',
-    'qa-only/SKILL.md',
+    'qa-report/SKILL.md',
     'setup-browser-cookies/SKILL.md',
     'ship/SKILL.md', 'review/SKILL.md',
     'plan-ceo-review/SKILL.md', 'plan-eng-review/SKILL.md',
@@ -659,7 +678,7 @@ describe('investigate skill structure', () => {
 describe('Contributor mode preamble structure', () => {
   const skillsWithPreamble = [
     'SKILL.md', 'browse/SKILL.md', 'qa/SKILL.md',
-    'qa-only/SKILL.md',
+    'qa-report/SKILL.md',
     'setup-browser-cookies/SKILL.md',
     'ship/SKILL.md', 'review/SKILL.md',
     'plan-ceo-review/SKILL.md', 'plan-eng-review/SKILL.md',
@@ -747,7 +766,7 @@ describe('Enum & Value Completeness in review checklist', () => {
 describe('Completeness Principle in generated SKILL.md files', () => {
   const skillsWithPreamble = [
     'SKILL.md', 'browse/SKILL.md', 'qa/SKILL.md',
-    'qa-only/SKILL.md',
+    'qa-report/SKILL.md',
     'setup-browser-cookies/SKILL.md',
     'ship/SKILL.md', 'review/SKILL.md',
     'plan-ceo-review/SKILL.md', 'plan-eng-review/SKILL.md',
@@ -931,12 +950,19 @@ describe('Test Bootstrap ({{TEST_BOOTSTRAP}}) integration', () => {
     expect(content).toContain('Test Framework Bootstrap');
   });
 
-  test('TEST_BOOTSTRAP does NOT appear in qa-only/SKILL.md', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'qa-only', 'SKILL.md'), 'utf-8');
+  test('TEST_BOOTSTRAP does NOT appear in qa-report/SKILL.md', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'qa-report', 'SKILL.md'), 'utf-8');
     expect(content).not.toContain('Test Framework Bootstrap');
     // But should have the recommendation note
     expect(content).toContain('No test framework detected');
     expect(content).toContain('Run `/qa` to bootstrap');
+  });
+
+  test('qa-report/SKILL.md includes persona and state planning', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'qa-report', 'SKILL.md'), 'utf-8');
+    expect(content).toContain('Persona & Coverage Planning');
+    expect(content).toContain('Blocked / Untested Coverage');
+    expect(content).toContain('who you are testing as');
   });
 
   test('bootstrap includes framework knowledge table', () => {
@@ -1120,6 +1146,13 @@ describe('QA report template', () => {
     expect(content).toContain('### Deferred Tests');
     expect(content).toContain('**Precondition:**');
   });
+
+  test('qa-report-template.md has coverage matrix sections', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'qa', 'templates', 'qa-report-template.md'), 'utf-8');
+    expect(content).toContain('## Coverage Matrix');
+    expect(content).toContain('## Personas & States Tested');
+    expect(content).toContain('## Blocked / Untested Coverage');
+  });
 });
 
 // --- Codex skill validation ---
@@ -1221,7 +1254,7 @@ describe('Skill trigger phrases', () => {
   // Excluded: root gstack (browser tool), gstack-upgrade (gstack-specific),
   // humanizer (text tool)
   const SKILLS_REQUIRING_TRIGGERS = [
-    'qa', 'qa-only', 'ship', 'review', 'investigate', 'office-hours',
+    'qa', 'qa-report', 'ship', 'review', 'investigate', 'office-hours',
     'plan-ceo-review', 'plan-eng-review', 'plan-design-review',
     'design-review', 'design-consultation', 'retro', 'document-release',
     'codex', 'browse', 'setup-browser-cookies',
@@ -1241,7 +1274,7 @@ describe('Skill trigger phrases', () => {
 
   // Skills with proactive triggers should have "Proactively suggest" in description
   const SKILLS_REQUIRING_PROACTIVE = [
-    'qa', 'qa-only', 'ship', 'review', 'investigate', 'office-hours',
+    'qa', 'qa-report', 'ship', 'review', 'investigate', 'office-hours',
     'plan-ceo-review', 'plan-eng-review', 'plan-design-review',
     'design-review', 'design-consultation', 'retro', 'document-release',
   ];

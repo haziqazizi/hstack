@@ -20,7 +20,7 @@ const SKILL_FILES = [
   'SKILL.md',
   'browse/SKILL.md',
   'qa/SKILL.md',
-  'qa-only/SKILL.md',
+  'qa-report/SKILL.md',
   'ship/SKILL.md',
   'review/SKILL.md',
   'retro/SKILL.md',

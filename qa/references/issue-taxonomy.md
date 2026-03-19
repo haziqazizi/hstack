@@ -73,6 +73,15 @@
 
 ## Per-Page Exploration Checklist
 
+Before page-by-page exploration, build a lightweight **persona + state matrix** for the run:
+
+- Which personas matter? (visitor, member, admin, support, seller, buyer, etc.)
+- Which auth states matter? (logged out, logged in, expired, pending verification)
+- Which account/data states matter? (empty account, populated account, degraded/error state)
+- Which critical flows belong to each persona/state combination?
+
+If a critical persona or state cannot be tested, record it as **Blocked / Untested Coverage** in the QA report. Missing role coverage is itself a QA risk.
+
 For each page visited during a QA session:
 
 1. **Visual scan** — Take annotated screenshot (`snapshot -i -a -o`). Look for layout issues, broken images, alignment.
@@ -83,3 +92,4 @@ For each page visited during a QA session:
 6. **Console** — Run `console --errors` after interactions. Any new JS errors or failed requests?
 7. **Responsiveness** — If relevant, check mobile and tablet viewports.
 8. **Auth boundaries** — What happens when logged out? Different user roles?
+9. **Persona/state coverage** — Did you test the relevant personas and account states for this page/flow? If not, note the gap explicitly.

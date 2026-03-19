@@ -48,7 +48,7 @@ if (evalsEnabled && !process.env.EVALS_ALL) {
 function installSkills(tmpDir: string) {
   const skillDirs = [
     '', // root gstack SKILL.md
-    'qa', 'qa-only', 'ship', 'review', 'plan-ceo-review', 'plan-eng-review',
+    'qa', 'qa-report', 'ship', 'review', 'plan-ceo-review', 'plan-eng-review',
     'plan-design-review', 'design-review', 'design-consultation', 'retro',
     'document-release', 'investigate', 'office-hours', 'browse', 'setup-browser-cookies',
     'gstack-upgrade', 'humanizer',
@@ -315,9 +315,48 @@ export default app;
 
       const testName = 'journey-qa';
       const expectedSkill = 'qa';
-      const alternateSkills = ['qa-only', 'browse'];
+      const alternateSkills = ['browse'];
       const result = await runSkillTest({
         prompt: "I think the app is mostly working now. Can you go through the site and test everything — find any bugs and fix them?",
+        workingDirectory: tmpDir,
+        maxTurns: 5,
+        allowedTools: ['Skill', 'Read', 'Bash', 'Glob', 'Grep'],
+        timeout: 60_000,
+        testName,
+        runId,
+      });
+
+      const skillCalls = result.toolCalls.filter(tc => tc.tool === 'Skill');
+      const actualSkill = skillCalls.length > 0 ? skillCalls[0]?.input?.skill : undefined;
+      const acceptable = [expectedSkill, ...alternateSkills];
+
+      logCost(`journey: ${testName}`, result);
+      recordRouting(testName, result, expectedSkill, actualSkill);
+
+      expect(skillCalls.length, `Expected Skill tool to be called but got 0 calls. Claude may have answered directly without invoking a skill. Tool calls: ${result.toolCalls.map(tc => tc.tool).join(', ')}`).toBeGreaterThan(0);
+      expect(acceptable, `Expected skill ${expectedSkill} but got ${actualSkill}`).toContain(actualSkill);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  }, 90_000);
+
+  test('journey-qa-report', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'routing-qa-report-'));
+    try {
+      initGitRepo(tmpDir);
+      installSkills(tmpDir);
+
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'waitlist-app', scripts: { dev: 'next dev' } }, null, 2));
+      fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'src/index.html'), '<html><body><h1>Waitlist App</h1></body></html>');
+      spawnSync('git', ['add', '.'], { cwd: tmpDir, stdio: 'pipe', timeout: 5000 });
+      spawnSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir, stdio: 'pipe', timeout: 5000 });
+
+      const testName = 'journey-qa-report';
+      const expectedSkill = 'qa-report';
+      const alternateSkills = ['browse'];
+      const result = await runSkillTest({
+        prompt: "Please go through the site, test it like a user, and give me a bug report only — do not fix anything.",
         workingDirectory: tmpDir,
         maxTurns: 5,
         allowedTools: ['Skill', 'Read', 'Bash', 'Glob', 'Grep'],
