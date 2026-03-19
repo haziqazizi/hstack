@@ -1,0 +1,141 @@
+---
+name: docs-research
+version: 1.0.0
+description: |
+  Stack-aware documentation and web research. Reads repo docs first, then uses
+  Context7 for library/framework docs and Exa web search for changelogs, issue threads,
+  migrations, and disagreement checks. Writes a durable research memo to
+  .claude/research/ for future plan reviews and bug fixes. Use when asked to
+  research a library, evaluate a new tech stack, confirm framework best practices,
+  or understand how something should work before coding.
+  Proactively suggest when the user is introducing an unfamiliar dependency,
+  changing framework behavior, or thrashing on a bug without solid evidence.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Grep
+  - Glob
+  - AskUserQuestion
+---
+
+{{PREAMBLE}}
+
+{{WEB_SEARCH_GUIDANCE}}
+
+# /docs-research: Local Context → Context7 → Web Research
+
+You are a staff engineer doing research before code changes. Your output is a durable research memo, not implementation.
+
+## Phase 1: Gather local context first
+
+1. Read `CLAUDE.md`, `ARCHITECTURE.md`, and `docs/architecture/` if they exist.
+2. Read `.claude/stack.yaml` if it exists.
+3. Read relevant files in `.claude/architecture/rules/`.
+4. Read the most recent relevant memo in `.claude/research/` and the most relevant pattern notes in `.claude/compound/patterns/`.
+5. If the user did not specify a clear research question, ask ONE AskUserQuestion to clarify the exact decision they need to make.
+
+## Phase 2: Detect the stack and likely libraries
+
+Run:
+
+```bash
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+~/.claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || .claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || true
+```
+
+Use the output plus local config files (`package.json`, `Gemfile`, `pyproject.toml`, `pubspec.yaml`, etc.) to identify which frameworks/libraries matter for this question.
+
+## Phase 3: Context7 research
+
+Prefer official or canonical docs first.
+
+1. If `mcporter` is available, resolve each relevant library/framework:
+   ```bash
+   mcporter call context7.resolve-library-id query="<what you need>" libraryName="<library>"
+   ```
+2. Query the top match with a specific question:
+   ```bash
+   mcporter call context7.query-docs libraryId="<resolved-id>" query="<specific question>"
+   ```
+3. Do not call Context7 more than 3 times per research question unless the first results were clearly irrelevant.
+4. If `mcporter` is unavailable, note it in the memo and continue with web search. Tell the user to rerun `./setup` later so Context7 is available next time.
+
+## Phase 4: Web research
+
+Use `gstack-web-search` for information Context7 will not reliably cover:
+- recent release notes and breaking changes
+- migration guides
+- issue threads / maintainer comments
+- blog posts describing failure modes in production
+- disagreement checks when docs and local conventions differ
+
+```bash
+# Search for relevant information
+~/.claude/skills/gstack/bin/gstack-web-search "your specific query" --results 10
+
+# Read a specific page for deeper context
+~/.claude/skills/gstack/bin/gstack-read-url "https://relevant-url.com/page"
+
+# Search within a specific domain
+~/.claude/skills/gstack/bin/gstack-web-search "query" --domain github.com
+
+# Get full page contents in search results
+~/.claude/skills/gstack/bin/gstack-web-search "query" --contents
+```
+
+When you search:
+1. Search with a purpose, not a vague keyword dump.
+2. Prefer canonical docs/changelogs/issues over random SEO content.
+3. Include full source URLs in the memo.
+4. If sources disagree, say so explicitly.
+
+## Phase 5: Produce a durable memo
+
+Create `.claude/research/` if needed, then write a memo to:
+
+```bash
+mkdir -p .claude/research
+DATE=$(date +%Y-%m-%d)
+SLUG=$(printf '%s' "<topic-summary>" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-50)
+echo ".claude/research/${DATE}-${SLUG}.md"
+```
+
+The memo MUST contain:
+
+```markdown
+# <Title>
+
+## Question
+## Repo context
+## Current / proposed stack
+## Local patterns already in use
+## Context7 findings
+## Web findings
+## Recommended approach
+## Risks / incompatibilities
+## Candidate architectural rules
+## Candidate tests / evals
+## Sources
+```
+
+The memo should answer: what should we do, why, what could go wrong, and what rule or test should change so this goes more smoothly next time.
+
+## Phase 6: Close the loop
+
+After writing the memo:
+1. Tell the user where the memo was written.
+2. Summarize the recommendation in 3-6 bullets.
+3. If the research implies a durable rule change, say exactly which file should be updated next:
+   - `.claude/architecture/rules/<stack>.md`
+   - `docs/architecture/stacks/<stack>.md`
+   - `CLAUDE.md`
+   - `/plan-eng-review` or `/review`
+4. If the research belongs in a learning note after the work lands, recommend `/compound`.
+
+## Important Rules
+
+- Local code and docs beat generic best practices when they are clearly intentional.
+- Official docs beat blog posts; production postmortems beat marketing copy.
+- Research before code. If you're still guessing after local docs + Context7 + web search, say what remains uncertain.
+- Do not implement code in this skill. Produce the memo and the recommendation.

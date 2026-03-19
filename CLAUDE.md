@@ -60,6 +60,7 @@ gstack/
 │   ├── skill-llm-eval.test.ts   # Tier 3: LLM-as-judge (~$0.15/run)
 │   └── skill-e2e.test.ts         # Tier 2: E2E via claude -p (~$3.85/run)
 ├── qa-report/         # /qa-report skill (report-only QA, no fixes)
+├── docs-research/    # /docs-research skill (stack-aware docs + web research)
 ├── plan-design-review/  # /plan-design-review skill (report-only design audit)
 ├── design-review/    # /design-review skill (design audit + fix loop)
 ├── ship/            # Ship workflow skill

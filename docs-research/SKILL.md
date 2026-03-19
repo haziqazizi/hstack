@@ -1,33 +1,22 @@
 ---
-name: investigate
+name: docs-research
 version: 1.0.0
 description: |
-  Systematic debugging with root cause investigation. Four phases: investigate,
-  analyze, hypothesize, implement. Iron Law: no fixes without root cause.
-  Use when asked to "debug this", "fix this bug", "why is this broken",
-  "investigate this error", or "root cause analysis".
-  Proactively suggest when the user reports errors, unexpected behavior, or
-  is troubleshooting why something stopped working.
+  Stack-aware documentation and web research. Reads repo docs first, then uses
+  Context7 for library/framework docs and Exa web search for changelogs, issue threads,
+  migrations, and disagreement checks. Writes a durable research memo to
+  .claude/research/ for future plan reviews and bug fixes. Use when asked to
+  research a library, evaluate a new tech stack, confirm framework best practices,
+  or understand how something should work before coding.
+  Proactively suggest when the user is introducing an unfamiliar dependency,
+  changing framework behavior, or thrashing on a bug without solid evidence.
 allowed-tools:
   - Bash
   - Read
   - Write
-  - Edit
   - Grep
   - Glob
   - AskUserQuestion
-hooks:
-  PreToolUse:
-    - matcher: "Edit"
-      hooks:
-        - type: command
-          command: "bash ${CLAUDE_SKILL_DIR}/../freeze/bin/check-freeze.sh"
-          statusMessage: "Checking debug scope boundary..."
-    - matcher: "Write"
-      hooks:
-        - type: command
-          command: "bash ${CLAUDE_SKILL_DIR}/../freeze/bin/check-freeze.sh"
-          statusMessage: "Checking debug scope boundary..."
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
 <!-- Regenerate: bun run gen:skill-docs -->
@@ -51,7 +40,7 @@ echo "LAKE_INTRO: $_LAKE_SEEN"
 _EXA=$(~/.claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || .claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || echo "EXA_MISSING")
 echo "EXA_SEARCH: $_EXA"
 mkdir -p ~/.gstack/analytics
-echo '{"skill":"investigate","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+echo '{"skill":"docs-research","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```
 
 If `PROACTIVE` is `"false"`, do not proactively suggest gstack skills — only invoke
@@ -170,158 +159,142 @@ ATTEMPTED: [what you tried]
 RECOMMENDATION: [what the user should do next]
 ```
 
-# Systematic Debugging
+## Web Search (Exa)
 
-## Iron Law
+If the preamble printed `EXA_SEARCH: EXA_READY`, Exa web search is available. Use the gstack CLI for all web research:
 
-**NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST.**
+**Search the web:**
+```bash
+~/.claude/skills/gstack/bin/gstack-web-search "your search query"
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --results 10
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --contents          # include full page text
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --category news     # filter: company, research paper, news, pdf, github, tweet, personal site
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --domain github.com # restrict to domain
+```
 
-Fixing symptoms creates whack-a-mole debugging. Every fix that doesn't address root cause makes the next bug harder to find. Find the root cause, then fix it.
+**Read a specific URL:**
+```bash
+~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page"
+~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page" --max-chars 20000
+```
 
----
+If `EXA_SEARCH: EXA_MISSING`, web search is not configured. Tell the user:
+"Web search is not available — run `./setup` in the gstack directory to add your Exa API key, or add it manually: `echo 'EXA_API_KEY=your-key' >> ~/.gstack/.env`"
+Then continue without web search — use local docs and Context7 only.
 
-## Phase 1: Root Cause Investigation
+# /docs-research: Local Context → Context7 → Web Research
 
-Gather context before forming any hypothesis.
+You are a staff engineer doing research before code changes. Your output is a durable research memo, not implementation.
 
-1. **Collect symptoms:** Read the error messages, stack traces, and reproduction steps. If the user hasn't provided enough context, ask ONE question at a time via AskUserQuestion.
+## Phase 1: Gather local context first
 
-2. **Read the code:** Trace the code path from the symptom back to potential causes. Use Grep to find all references, Read to understand the logic.
+1. Read `CLAUDE.md`, `ARCHITECTURE.md`, and `docs/architecture/` if they exist.
+2. Read `.claude/stack.yaml` if it exists.
+3. Read relevant files in `.claude/architecture/rules/`.
+4. Read the most recent relevant memo in `.claude/research/` and the most relevant pattern notes in `.claude/compound/patterns/`.
+5. If the user did not specify a clear research question, ask ONE AskUserQuestion to clarify the exact decision they need to make.
 
-3. **Check recent changes:**
+## Phase 2: Detect the stack and likely libraries
+
+Run:
+
+```bash
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+~/.claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || .claude/skills/gstack/bin/gstack-stack-detect --project-root "$PROJECT_ROOT" --json 2>/dev/null || true
+```
+
+Use the output plus local config files (`package.json`, `Gemfile`, `pyproject.toml`, `pubspec.yaml`, etc.) to identify which frameworks/libraries matter for this question.
+
+## Phase 3: Context7 research
+
+Prefer official or canonical docs first.
+
+1. If `mcporter` is available, resolve each relevant library/framework:
    ```bash
-   git log --oneline -20 -- <affected-files>
+   mcporter call context7.resolve-library-id query="<what you need>" libraryName="<library>"
    ```
-   Was this working before? What changed? A regression means the root cause is in the diff.
+2. Query the top match with a specific question:
+   ```bash
+   mcporter call context7.query-docs libraryId="<resolved-id>" query="<specific question>"
+   ```
+3. Do not call Context7 more than 3 times per research question unless the first results were clearly irrelevant.
+4. If `mcporter` is unavailable, note it in the memo and continue with web search. Tell the user to rerun `./setup` later so Context7 is available next time.
 
-4. **Reproduce:** Can you trigger the bug deterministically? If not, gather more evidence before proceeding.
+## Phase 4: Web research
 
-Output: **"Root cause hypothesis: ..."** — a specific, testable claim about what is wrong and why.
-
----
-
-## Scope Lock
-
-After forming your root cause hypothesis, lock edits to the affected module to prevent scope creep.
+Use `gstack-web-search` for information Context7 will not reliably cover:
+- recent release notes and breaking changes
+- migration guides
+- issue threads / maintainer comments
+- blog posts describing failure modes in production
+- disagreement checks when docs and local conventions differ
 
 ```bash
-[ -x "${CLAUDE_SKILL_DIR}/../freeze/bin/check-freeze.sh" ] && echo "FREEZE_AVAILABLE" || echo "FREEZE_UNAVAILABLE"
+# Search for relevant information
+~/.claude/skills/gstack/bin/gstack-web-search "your specific query" --results 10
+
+# Read a specific page for deeper context
+~/.claude/skills/gstack/bin/gstack-read-url "https://relevant-url.com/page"
+
+# Search within a specific domain
+~/.claude/skills/gstack/bin/gstack-web-search "query" --domain github.com
+
+# Get full page contents in search results
+~/.claude/skills/gstack/bin/gstack-web-search "query" --contents
 ```
 
-**If FREEZE_AVAILABLE:** Identify the narrowest directory containing the affected files. Write it to the freeze state file:
+When you search:
+1. Search with a purpose, not a vague keyword dump.
+2. Prefer canonical docs/changelogs/issues over random SEO content.
+3. Include full source URLs in the memo.
+4. If sources disagree, say so explicitly.
+
+## Phase 5: Produce a durable memo
+
+Create `.claude/research/` if needed, then write a memo to:
 
 ```bash
-STATE_DIR="${CLAUDE_PLUGIN_DATA:-$HOME/.gstack}"
-mkdir -p "$STATE_DIR"
-echo "<detected-directory>/" > "$STATE_DIR/freeze-dir.txt"
-echo "Debug scope locked to: <detected-directory>/"
+mkdir -p .claude/research
+DATE=$(date +%Y-%m-%d)
+SLUG=$(printf '%s' "<topic-summary>" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-50)
+echo ".claude/research/${DATE}-${SLUG}.md"
 ```
 
-Substitute `<detected-directory>` with the actual directory path (e.g., `src/auth/`). Tell the user: "Edits restricted to `<dir>/` for this debug session. This prevents changes to unrelated code. Run `/unfreeze` to remove the restriction."
+The memo MUST contain:
 
-If the bug spans the entire repo or the scope is genuinely unclear, skip the lock and note why.
+```markdown
+# <Title>
 
-**If FREEZE_UNAVAILABLE:** Skip scope lock. Edits are unrestricted.
-
----
-
-## Phase 2: Pattern Analysis
-
-Check if this bug matches a known pattern:
-
-| Pattern | Signature | Where to look |
-|---------|-----------|---------------|
-| Race condition | Intermittent, timing-dependent | Concurrent access to shared state |
-| Nil/null propagation | NoMethodError, TypeError | Missing guards on optional values |
-| State corruption | Inconsistent data, partial updates | Transactions, callbacks, hooks |
-| Integration failure | Timeout, unexpected response | External API calls, service boundaries |
-| Configuration drift | Works locally, fails in staging/prod | Env vars, feature flags, DB state |
-| Stale cache | Shows old data, fixes on cache clear | Redis, CDN, browser cache, Turbo |
-
-Also check:
-- `TODOS.md` for related known issues
-- `git log` for prior fixes in the same area — **recurring bugs in the same files are an architectural smell**, not a coincidence
-
----
-
-## Phase 3: Hypothesis Testing
-
-Before writing ANY fix, verify your hypothesis.
-
-1. **Confirm the hypothesis:** Add a temporary log statement, assertion, or debug output at the suspected root cause. Run the reproduction. Does the evidence match?
-
-2. **If the hypothesis is wrong:** Return to Phase 1. Gather more evidence. Do not guess.
-
-3. **3-strike rule:** If 3 hypotheses fail, **STOP**. Use AskUserQuestion:
-   ```
-   3 hypotheses tested, none match. This may be an architectural issue
-   rather than a simple bug.
-
-   A) Continue investigating — I have a new hypothesis: [describe]
-   B) Escalate for human review — this needs someone who knows the system
-   C) Add logging and wait — instrument the area and catch it next time
-   ```
-
-**Red flags** — if you see any of these, slow down:
-- "Quick fix for now" — there is no "for now." Fix it right or escalate.
-- Proposing a fix before tracing data flow — you're guessing.
-- Each fix reveals a new problem elsewhere — wrong layer, not wrong code.
-
----
-
-## Phase 4: Implementation
-
-Once root cause is confirmed:
-
-1. **Fix the root cause, not the symptom.** The smallest change that eliminates the actual problem.
-
-2. **Minimal diff:** Fewest files touched, fewest lines changed. Resist the urge to refactor adjacent code.
-
-3. **Write a regression test** that:
-   - **Fails** without the fix (proves the test is meaningful)
-   - **Passes** with the fix (proves the fix works)
-
-4. **Run the full test suite.** Paste the output. No regressions allowed.
-
-5. **If the fix touches >5 files:** Use AskUserQuestion to flag the blast radius:
-   ```
-   This fix touches N files. That's a large blast radius for a bug fix.
-   A) Proceed — the root cause genuinely spans these files
-   B) Split — fix the critical path now, defer the rest
-   C) Rethink — maybe there's a more targeted approach
-   ```
-
----
-
-## Phase 5: Verification & Report
-
-**Fresh verification:** Reproduce the original bug scenario and confirm it's fixed. This is not optional.
-
-Run the test suite and paste the output.
-
-Output a structured debug report:
-```
-DEBUG REPORT
-════════════════════════════════════════
-Symptom:         [what the user observed]
-Root cause:      [what was actually wrong]
-Fix:             [what was changed, with file:line references]
-Evidence:        [test output, reproduction attempt showing fix works]
-Regression test: [file:line of the new test]
-Related:         [TODOS.md items, prior bugs in same area, architectural notes]
-Status:          DONE | DONE_WITH_CONCERNS | BLOCKED
-════════════════════════════════════════
+## Question
+## Repo context
+## Current / proposed stack
+## Local patterns already in use
+## Context7 findings
+## Web findings
+## Recommended approach
+## Risks / incompatibilities
+## Candidate architectural rules
+## Candidate tests / evals
+## Sources
 ```
 
----
+The memo should answer: what should we do, why, what could go wrong, and what rule or test should change so this goes more smoothly next time.
+
+## Phase 6: Close the loop
+
+After writing the memo:
+1. Tell the user where the memo was written.
+2. Summarize the recommendation in 3-6 bullets.
+3. If the research implies a durable rule change, say exactly which file should be updated next:
+   - `.claude/architecture/rules/<stack>.md`
+   - `docs/architecture/stacks/<stack>.md`
+   - `CLAUDE.md`
+   - `/plan-eng-review` or `/review`
+4. If the research belongs in a learning note after the work lands, recommend `/compound`.
 
 ## Important Rules
 
-- **3+ failed fix attempts → STOP and question the architecture.** Wrong architecture, not failed hypothesis.
-- **Never apply a fix you cannot verify.** If you can't reproduce and confirm, don't ship it.
-- **Never say "this should fix it."** Verify and prove it. Run the tests.
-- **If fix touches >5 files → AskUserQuestion** about blast radius before proceeding.
-- **Completion status:**
-  - DONE — root cause found, fix applied, regression test written, all tests pass
-  - DONE_WITH_CONCERNS — fixed but cannot fully verify (e.g., intermittent bug, requires staging)
-  - BLOCKED — root cause unclear after investigation, escalated
+- Local code and docs beat generic best practices when they are clearly intentional.
+- Official docs beat blog posts; production postmortems beat marketing copy.
+- Research before code. If you're still guessing after local docs + Context7 + web search, say what remains uncertain.
+- Do not implement code in this skill. Produce the memo and the recommendation.

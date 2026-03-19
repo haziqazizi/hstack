@@ -14,6 +14,7 @@ description: |
   - Reviewing a plan (architecture) → suggest /plan-eng-review
   - Reviewing a plan (design) → suggest /plan-design-review
   - Creating a design system → suggest /design-consultation
+  - Researching a library, framework, or proposed tech stack → suggest /docs-research
   - Debugging errors → suggest /investigate
   - Testing the app → suggest /qa
   - Code review before merge → suggest /review
@@ -63,6 +64,8 @@ echo "BRANCH: $_BRANCH"
 echo "PROACTIVE: $_PROACTIVE"
 _LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
+_EXA=$(~/.claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || .claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || echo "EXA_MISSING")
+echo "EXA_SEARCH: $_EXA"
 mkdir -p ~/.gstack/analytics
 echo '{"skill":"gstack","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```

@@ -112,6 +112,7 @@ describe('Update check preamble', () => {
     'design-review/SKILL.md',
     'design-consultation/SKILL.md',
     'document-release/SKILL.md',
+    'docs-research/SKILL.md',
   ];
 
   for (const skill of skillsWithUpdateCheck) {
@@ -442,6 +443,7 @@ describe('v0.4.1 preamble features', () => {
     'design-review/SKILL.md',
     'design-consultation/SKILL.md',
     'document-release/SKILL.md',
+    'docs-research/SKILL.md',
   ];
 
   for (const skill of skillsWithPreamble) {
@@ -575,6 +577,7 @@ describe('Contributor mode preamble structure', () => {
     'design-review/SKILL.md',
     'design-consultation/SKILL.md',
     'document-release/SKILL.md',
+    'docs-research/SKILL.md',
   ];
 
   for (const skill of skillsWithPreamble) {
@@ -663,6 +666,7 @@ describe('Completeness Principle in generated SKILL.md files', () => {
     'design-review/SKILL.md',
     'design-consultation/SKILL.md',
     'document-release/SKILL.md',
+    'docs-research/SKILL.md',
   ];
 
   for (const skill of skillsWithPreamble) {

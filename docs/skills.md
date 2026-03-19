@@ -9,6 +9,7 @@ Detailed guides for every gstack skill — philosophy, workflow, and examples.
 | [`/plan-eng-review`](#plan-eng-review) | **Eng Manager** | Lock in architecture, data flow, diagrams, edge cases, and tests. Forces hidden assumptions into the open. |
 | [`/plan-design-review`](#plan-design-review) | **Senior Designer** | Interactive plan-mode design review. Rates each dimension 0-10, explains what a 10 looks like, fixes the plan. Works in plan mode. |
 | [`/design-consultation`](#design-consultation) | **Design Partner** | Build a complete design system from scratch. Knows the landscape, proposes creative risks, generates realistic product mockups. Design at the heart of all other phases. |
+| [`/docs-research`](#docs-research) | **Technical Researcher** | Read repo context first, then official docs and current web sources. Writes durable memos for unfamiliar libraries, stack changes, and framework behavior questions. |
 | [`/review`](#review) | **Staff Engineer** | Find the bugs that pass CI but blow up in production. Auto-fixes the obvious ones. Flags completeness gaps. |
 | [`/investigate`](#investigate) | **Debugger** | Systematic root-cause debugging. Iron Law: no fixes without investigation. Traces data flow, tests hypotheses, stops after 3 failed fixes. |
 | [`/design-review`](#design-review) | **Designer Who Codes** | Live-site visual audit + fix loop. 80-item audit, then fixes what it finds. Atomic commits, before/after screenshots. |
@@ -355,6 +356,22 @@ Claude: Wrote DESIGN.md (typography, color, spacing, layout, motion).
 ```
 
 ---
+
+## `/docs-research`
+
+This is the skill for the moment when intuition stops being enough.
+
+You are touching a framework edge case, considering a new dependency, debugging behavior that feels non-obvious, or proposing a new stack. `/docs-research` reads your repo's current rules first, then official docs, then the live web. The point is to make the next architectural decision from evidence instead of folklore.
+
+The order matters:
+
+1. **Local truth** — `CLAUDE.md`, `ARCHITECTURE.md`, `docs/architecture/`, `.claude/architecture/rules/`
+2. **Current stack context** — `.claude/stack.yaml` and project config files
+3. **Official docs** — Context7 queries for framework/library guidance
+4. **Current ecosystem context** — changelogs, issue threads, migration guides, disagreements between sources
+
+The deliverable is a memo in `.claude/research/` that says what we asked, what the repo already does, what the docs say, what the web says, what we should do, and what rule/test/doc should change so the same question goes faster next time.
+
 
 ## `/design-review`
 

@@ -21,6 +21,7 @@ describe('gen-skill-docs', () => {
     { dir: 'design-review', name: 'design-review' },
     { dir: 'design-consultation', name: 'design-consultation' },
     { dir: 'document-release', name: 'document-release' },
+    { dir: 'docs-research', name: 'docs-research' },
     { dir: 'careful', name: 'careful' },
     { dir: 'freeze', name: 'freeze' },
     { dir: 'guard', name: 'guard' },

@@ -16,7 +16,7 @@ In the last 60 days I have written **over 600,000 lines of production code** —
 
 Same person. Different era. The difference is the tooling.
 
-**gstack is how I do it.** It is my open source software factory. It turns Claude Code into a virtual engineering team you actually manage — a CEO who rethinks the product, an eng manager who locks the architecture, a designer who catches AI slop, a paranoid reviewer who finds production bugs, a QA lead who opens a real browser and clicks through your app, and a release engineer who ships the PR. Fifteen specialists and six power tools, all as slash commands, all Markdown, **all free, MIT license, available right now.**
+**gstack is how I do it.** It is my open source software factory. It turns Claude Code into a virtual engineering team you actually manage — a CEO who rethinks the product, an eng manager who locks the architecture, a designer who catches AI slop, a paranoid reviewer who finds production bugs, a QA lead who opens a real browser and clicks through your app, and a release engineer who ships the PR. Sixteen specialists and six power tools, all as slash commands, all Markdown, **all free, MIT license, available right now.**
 
 I am learning how to get to the edge of what agentic systems can do as of March 2026, and this is my live experiment. I am sharing it because I want the whole world on this journey with me.
 
@@ -116,6 +116,7 @@ One sprint, one person, one feature — that takes about 30 minutes with gstack.
 | `/plan-eng-review` | **Eng Manager** | Lock in architecture, data flow, diagrams, edge cases, and tests. Forces hidden assumptions into the open. |
 | `/plan-design-review` | **Senior Designer** | Rates each design dimension 0-10, explains what a 10 looks like, then edits the plan to get there. AI Slop detection. Interactive — one AskUserQuestion per design choice. |
 | `/design-consultation` | **Design Partner** | Build a complete design system from scratch. Knows the landscape, proposes creative risks, generates realistic product mockups. Design at the heart of all other phases. |
+| `/docs-research` | **Technical Researcher** | Read repo context first, then official docs and live web sources. Writes durable research memos for unfamiliar libraries, framework changes, and stack proposals. |
 | `/review` | **Staff Engineer** | Find the bugs that pass CI but blow up in production. Auto-fixes the obvious ones. Flags completeness gaps. |
 | `/investigate` | **Debugger** | Systematic root-cause debugging. Iron Law: no fixes without investigation. Traces data flow, tests hypotheses, stops after 3 failed fixes. |
 | `/design-review` | **Designer Who Codes** | Same audit as /plan-design-review, then fixes what it finds. Atomic commits, before/after screenshots. |
@@ -160,7 +161,9 @@ One sprint, one person, one feature — that takes about 30 minutes with gstack.
 
 **Safety guardrails on demand.** Say "be careful" and `/careful` warns before any destructive command — rm -rf, DROP TABLE, force-push, git reset --hard. `/freeze` locks edits to one directory while debugging so Claude can't accidentally "fix" unrelated code. `/guard` activates both. `/investigate` auto-freezes to the module being investigated.
 
-**Proactive skill suggestions.** gstack notices what stage you're in — brainstorming, reviewing, debugging, testing — and suggests the right skill. Don't like it? Say "stop suggesting" and it remembers across sessions.
+**Docs research before thrash.** `/docs-research` reads your repo's current architecture rules first, then pulls official library docs via Context7 and current migration/disagreement context from the web. It writes a memo to `.claude/research/` so future plan reviews and bug fixes start from evidence instead of guesswork.
+
+**Proactive skill suggestions.** gstack notices what stage you're in — brainstorming, reviewing, debugging, researching unfamiliar tech, testing — and suggests the right skill. Don't like it? Say "stop suggesting" and it remembers across sessions.
 
 ## 10-15 parallel sprints
 
@@ -182,7 +185,7 @@ Same tools, different outcome — because gstack gives you structured roles and 
 
 The models are getting better fast. The people who figure out how to work with them now — really work with them, not just dabble — are going to have a massive advantage. This is that window. Let's go.
 
-Fifteen specialists and six power tools. All slash commands. All Markdown. All free. **[github.com/garrytan/gstack](https://github.com/garrytan/gstack)** — MIT License
+Sixteen specialists and six power tools. All slash commands. All Markdown. All free. **[github.com/garrytan/gstack](https://github.com/garrytan/gstack)** — MIT License
 
 > **We're hiring.** Want to ship 10K+ LOC/day and help harden gstack?
 > Come work at YC — [ycombinator.com/software](https://ycombinator.com/software)
@@ -213,10 +216,10 @@ Fifteen specialists and six power tools. All slash commands. All Markdown. All f
 Use /browse from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.
 Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
 <<<<<<< HEAD
-/design-consultation, /review, /ship, /browse, /qa, /qa-report, /design-review,
+/design-consultation, /docs-research, /review, /ship, /browse, /qa, /qa-report, /design-review,
 /setup-browser-cookies, /retro, /investigate, /document-release, /codex, /careful,
 =======
-/design-consultation, /review, /ship, /browse, /qa, /qa-report, /design-review,
+/design-consultation, /docs-research, /review, /ship, /browse, /qa, /qa-report, /design-review,
 /setup-browser-cookies, /retro, /investigate, /document-release, /codex, /careful,
 >>>>>>> d63b70f (docs(browser): refresh legacy browser references)
 /freeze, /guard, /unfreeze, /gstack-upgrade.
