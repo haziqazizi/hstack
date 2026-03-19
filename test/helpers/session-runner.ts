@@ -44,11 +44,13 @@ export interface SkillTestResult {
 }
 
 const BROWSE_ERROR_PATTERNS = [
-  /Unknown command: \w+/,
-  /Unknown snapshot flag: .+/,
-  /ERROR: browse binary not found/,
-  /Server failed to start/,
-  /no such file or directory.*browse/i,
+  /timed out\. The element may be blocked/i,
+  /locator\.\w+: Unsupported token/i,
+  /Cannot navigate to invalid URL/i,
+  /Appium not installed/i,
+  /browser not installed/i,
+  /command not found.*agent-browser/i,
+  /Unknown argument:/i,
 ];
 
 // --- Testable NDJSON parser ---

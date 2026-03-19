@@ -3,7 +3,7 @@
  * dev:skill — Watch mode for SKILL.md template development.
  *
  * Watches .tmpl files, regenerates SKILL.md files on change,
- * validates all $B commands immediately.
+ * validates browser alias commands immediately.
  */
 
 import { validateSkill } from '../test/helpers/skill-parser';

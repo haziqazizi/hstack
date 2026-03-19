@@ -14,7 +14,9 @@
 **Priority:** P2
 **Depends on:** None
 
-### Sessions (isolated browser instances)
+### Sessions (isolated browser instances) — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `agent-browser --session`.
 
 **What:** Isolated browser instances with separate cookies/storage/history, addressable by name.
 
@@ -25,7 +27,9 @@
 **Effort:** L
 **Priority:** P3
 
-### Video recording
+### Video recording — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `agent-browser record`.
 
 **What:** Record browser interactions as video (start/stop controls).
 
@@ -46,7 +50,9 @@
 **Effort:** S
 **Priority:** P3
 
-### State persistence
+### State persistence — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `agent-browser state save/load`.
 
 **What:** Save/load cookies + localStorage to JSON files for reproducible test sessions.
 
@@ -68,7 +74,9 @@
 **Priority:** P3
 **Depends on:** Sessions, state persistence
 
-### Iframe support
+### Iframe support — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `agent-browser frame`.
 
 **What:** `frame <sel>` and `frame main` commands for cross-frame interaction.
 
@@ -77,7 +85,9 @@
 **Effort:** M
 **Priority:** P4
 
-### Semantic locators
+### Semantic locators — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `agent-browser find role/text/label/...`.
 
 **What:** `find role/label/text/placeholder/testid` with attached actions.
 
@@ -86,7 +96,9 @@
 **Effort:** M
 **Priority:** P4
 
-### Device emulation presets
+### Device emulation presets — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `agent-browser set device`.
 
 **What:** `set device "iPhone 16 Pro"` for mobile/tablet testing.
 
@@ -95,7 +107,9 @@
 **Effort:** S
 **Priority:** P4
 
-### Network mocking/routing
+### Network mocking/routing — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `agent-browser network route`.
 
 **What:** Intercept, block, and mock network requests.
 
@@ -104,7 +118,9 @@
 **Effort:** M
 **Priority:** P4
 
-### Download handling
+### Download handling — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `agent-browser download`.
 
 **What:** Click-to-download with path control.
 
@@ -113,7 +129,9 @@
 **Effort:** S
 **Priority:** P4
 
-### Content safety
+### Content safety — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via agent-browser output/domain guards.
 
 **What:** `--max-output` truncation, `--allowed-domains` filtering.
 
@@ -122,7 +140,9 @@
 **Effort:** S
 **Priority:** P4
 
-### Streaming (WebSocket live preview)
+### Streaming (WebSocket live preview) — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `AGENT_BROWSER_STREAM_PORT`.
 
 **What:** WebSocket-based live preview for pair browsing sessions.
 
@@ -131,7 +151,9 @@
 **Effort:** L
 **Priority:** P4
 
-### CDP mode
+### CDP mode — RESOLVED via agent-browser migration
+
+**Status:** Shipped on 2026-03-19 via `agent-browser --cdp` / `connect`.
 
 **What:** Connect to already-running Chrome/Electron apps via Chrome DevTools Protocol.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gstack setup — build browser binary + register all skills with Claude Code
+# gstack setup — generate skill docs + register all skills with Claude Code
 set -e
 
 if ! command -v bun >/dev/null 2>&1; then
@@ -10,73 +10,75 @@ fi
 
 GSTACK_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILLS_DIR="$(dirname "$GSTACK_DIR")"
-BROWSE_BIN="$GSTACK_DIR/browse/dist/browse"
+DOCS_RESEARCH_CAPABILITY="$GSTACK_DIR/capabilities/docs-research"
 
-ensure_playwright_browser() {
-  (
-    cd "$GSTACK_DIR"
-    bun --eval 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
-  ) >/dev/null 2>&1
+ensure_agent_browser() {
+  if ! command -v agent-browser >/dev/null 2>&1; then
+    echo "Error: agent-browser is required but not installed." >&2
+    echo "Install it: npm install -g agent-browser && agent-browser install" >&2
+    exit 1
+  fi
+
+  if ! agent-browser --version >/dev/null 2>&1; then
+    echo "Error: agent-browser is installed but not runnable." >&2
+    exit 1
+  fi
 }
 
-# 1. Build browse binary if needed (smart rebuild: stale sources, package.json, lock)
-NEEDS_BUILD=0
-if [ ! -x "$BROWSE_BIN" ]; then
-  NEEDS_BUILD=1
-elif [ -n "$(find "$GSTACK_DIR/browse/src" -type f -newer "$BROWSE_BIN" -print -quit 2>/dev/null)" ]; then
-  NEEDS_BUILD=1
-elif [ "$GSTACK_DIR/package.json" -nt "$BROWSE_BIN" ]; then
-  NEEDS_BUILD=1
-elif [ -f "$GSTACK_DIR/bun.lock" ] && [ "$GSTACK_DIR/bun.lock" -nt "$BROWSE_BIN" ]; then
-  NEEDS_BUILD=1
-fi
-
-if [ "$NEEDS_BUILD" -eq 1 ]; then
-  echo "Building browse binary..."
-  (
-    cd "$GSTACK_DIR"
-    bun install
-    bun run build
-  )
-  # Safety net: write .version if build script didn't (e.g., git not available during build)
-  if [ ! -f "$GSTACK_DIR/browse/dist/.version" ]; then
-    git -C "$GSTACK_DIR" rev-parse HEAD > "$GSTACK_DIR/browse/dist/.version" 2>/dev/null || true
+ensure_docs_research_capability() {
+  if [ ! -d "$DOCS_RESEARCH_CAPABILITY" ]; then
+    return 0
   fi
-fi
 
-if [ ! -x "$BROWSE_BIN" ]; then
-  echo "gstack setup failed: browse binary missing at $BROWSE_BIN" >&2
-  exit 1
-fi
+  echo "Checking docs-research capability..."
+  if ! "$DOCS_RESEARCH_CAPABILITY/check.sh"; then
+    echo "Installing docs-research capability dependencies..."
+    "$DOCS_RESEARCH_CAPABILITY/install.sh"
+  fi
+}
 
-# 2. Ensure Playwright's Chromium is available
-if ! ensure_playwright_browser; then
-  echo "Installing Playwright Chromium..."
+maybe_bootstrap_project() {
+  [ "${GSTACK_SKIP_PROJECT_BOOTSTRAP:-0}" = "1" ] && return 0
+
+  local skills_basename claude_dir project_root
+  skills_basename="$(basename "$SKILLS_DIR")"
+  [ "$skills_basename" != "skills" ] && return 0
+
+  claude_dir="$(dirname "$SKILLS_DIR")"
+  [ "$(basename "$claude_dir")" != ".claude" ] && return 0
+
+  project_root="$(dirname "$claude_dir")"
+  if ! git -C "$project_root" rev-parse --show-toplevel >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "Bootstrapping stack-aware project files..."
   (
     cd "$GSTACK_DIR"
-    bunx playwright install chromium
+    bun run scripts/stack-bootstrap.ts --project-root "$project_root"
   )
-fi
+}
 
-if ! ensure_playwright_browser; then
-  echo "gstack setup failed: Playwright Chromium could not be launched" >&2
-  exit 1
-fi
+echo "Generating skill docs..."
+(
+  cd "$GSTACK_DIR"
+  bun run gen:skill-docs
+)
 
-# 3. Ensure ~/.gstack global state directory exists
+ensure_agent_browser
+ensure_docs_research_capability
+
 mkdir -p "$HOME/.gstack/projects"
+maybe_bootstrap_project
 
-# 4. Only create skill symlinks if we're inside a .claude/skills directory
 SKILLS_BASENAME="$(basename "$SKILLS_DIR")"
 if [ "$SKILLS_BASENAME" = "skills" ]; then
   linked=()
   for skill_dir in "$GSTACK_DIR"/*/; do
     if [ -f "$skill_dir/SKILL.md" ]; then
       skill_name="$(basename "$skill_dir")"
-      # Skip node_modules
       [ "$skill_name" = "node_modules" ] && continue
       target="$SKILLS_DIR/$skill_name"
-      # Create or update symlink; skip if a real file/directory exists
       if [ -L "$target" ] || [ ! -e "$target" ]; then
         ln -snf "gstack/$skill_name" "$target"
         linked+=("$skill_name")
@@ -85,17 +87,16 @@ if [ "$SKILLS_BASENAME" = "skills" ]; then
   done
 
   echo "gstack ready."
-  echo "  browse: $BROWSE_BIN"
+  echo "  agent-browser: $(command -v agent-browser)"
   if [ ${#linked[@]} -gt 0 ]; then
     echo "  linked skills: ${linked[*]}"
   fi
 else
   echo "gstack ready."
-  echo "  browse: $BROWSE_BIN"
+  echo "  agent-browser: $(command -v agent-browser)"
   echo "  (skipped skill symlinks — not inside .claude/skills/)"
 fi
 
-# 4. First-time welcome + legacy cleanup
 if [ ! -d "$HOME/.gstack" ]; then
   mkdir -p "$HOME/.gstack"
   echo "  Welcome! Run /gstack-upgrade anytime to stay current."

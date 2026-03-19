@@ -45,7 +45,7 @@ fi
 ln -s "$REPO_ROOT" "$GSTACK_LINK"
 
 # 5. Run setup via the symlink so it detects .claude/skills/ as its parent
-"$GSTACK_LINK/setup"
+GSTACK_SKIP_PROJECT_BOOTSTRAP=1 "$GSTACK_LINK/setup"
 
 echo ""
 echo "Dev mode active. Skills resolve from this working tree."

@@ -10,7 +10,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from 'fs
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-const SCRIPT = join(import.meta.dir, '..', '..', 'bin', 'gstack-config');
+const SCRIPT = join(import.meta.dir, '..', 'bin', 'gstack-config');
 
 let stateDir: string;
 

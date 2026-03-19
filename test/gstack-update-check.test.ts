@@ -11,7 +11,7 @@ import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync, mkdirSync
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-const SCRIPT = join(import.meta.dir, '..', '..', 'bin', 'gstack-update-check');
+const SCRIPT = join(import.meta.dir, '..', 'bin', 'gstack-update-check');
 
 let gstackDir: string;
 let stateDir: string;
@@ -41,7 +41,7 @@ beforeEach(() => {
   // Link real gstack-config so update_check config check works
   const binDir = join(gstackDir, 'bin');
   mkdirSync(binDir);
-  symlinkSync(join(import.meta.dir, '..', '..', 'bin', 'gstack-config'), join(binDir, 'gstack-config'));
+  symlinkSync(join(import.meta.dir, '..', 'bin', 'gstack-config'), join(binDir, 'gstack-config'));
 });
 
 afterEach(() => {
