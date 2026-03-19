@@ -1,0 +1,20 @@
+name: rails
+role: backend
+libraries:
+  - rails
+  - activerecord
+  - rspec
+research_queries:
+  - Rails service object patterns and transaction boundaries
+  - ActiveRecord includes and N+1 prevention
+  - Request spec coverage for auth and state transitions
+detect:
+  - type: file_exists
+    any_of:
+      - Gemfile
+      - config/application.rb
+  - type: file_contains
+    path: Gemfile
+    any_of:
+      - gem 'rails'
+      - gem "rails"

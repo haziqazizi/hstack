@@ -1,0 +1,28 @@
+# {{STACK_NAME}} implementation rules
+
+Applies to **{{STACK_ROLE}}** work in this repository.
+
+## Read this when
+- A task touches {{STACK_NAME}} files or libraries
+- You are debugging framework behavior, introducing a new dependency, or changing architecture
+- You are writing or reviewing bug fixes that should teach the team something durable
+
+## Core boundaries
+- Start with the boring, built-in path before inventing abstractions.
+- For reproducible bugs: prove the bug with a failing test or equivalent evidence before fixing it.
+- Stop brute forcing after repeated failed attempts without new evidence — research the docs and existing code first.
+- Prefer the narrowest durable prevention: tests/lints/harness before comments.
+
+## Project-specific rules to curate
+- Fill this file with rules the team wants every engineer and agent to follow.
+- Link incidents from `.claude/compound/incidents/` when a painful lesson justifies a rule.
+- Keep rules short, operational, and testable where possible.
+
+## Research prompts
+{{RESEARCH_TOPICS_BULLETS}}
+
+## Promotion ladder
+1. Regression test or lint
+2. Update this rule file if the lesson is stack-specific
+3. Update `docs/architecture/stacks/{{STACK_NAME}}.md` if the rationale needs more space
+4. Update `CLAUDE.md` only for short operational guidance

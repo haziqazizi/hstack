@@ -1,0 +1,19 @@
+name: flutter
+role: mobile
+libraries:
+  - flutter
+  - dart
+  - flutter_test
+research_queries:
+  - Flutter state management ownership and immutable notifier updates
+  - Flutter widget and integration test best practices
+  - Async error handling and lifecycle disposal in Flutter
+detect:
+  - type: file_exists
+    any_of:
+      - pubspec.yaml
+  - type: file_contains
+    path: pubspec.yaml
+    any_of:
+      - "flutter:"
+      - "sdk: flutter"

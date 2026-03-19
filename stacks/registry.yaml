@@ -1,0 +1,5 @@
+packs:
+  - rails
+  - react
+  - django
+  - flutter

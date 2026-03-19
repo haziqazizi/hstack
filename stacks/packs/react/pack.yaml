@@ -1,0 +1,15 @@
+name: react
+role: frontend
+libraries:
+  - react
+  - react-dom
+  - testing-library
+research_queries:
+  - React state ownership and effect cleanup best practices
+  - React testing library integration test patterns
+  - Safe async data fetching and cache invalidation in React
+detect:
+  - type: package_json_dep
+    any_of:
+      - react
+      - react-dom

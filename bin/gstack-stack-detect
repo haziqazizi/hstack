@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+GSTACK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+exec bun run "$GSTACK_DIR/scripts/stack-detect.ts" "$@"

@@ -1,0 +1,20 @@
+# {{STACK_NAME}} architecture notes
+
+This document explains how **{{STACK_NAME}}** is used in this repository.
+
+## Responsibilities
+- What belongs in the {{STACK_NAME}} layer?
+- What should stay out of it?
+- Which boundaries matter for correctness, performance, and readability?
+
+## Current libraries
+{{LIBRARIES_BULLETS}}
+
+## Failure modes to watch
+- Hidden side effects
+- Incomplete branching or sibling codepaths
+- Missing negative-path tests
+- Drift between architecture docs and reality
+
+## How to update this doc
+When `/compound` or `/plan-eng-review` identifies a durable lesson, add the reasoning here and link the incident note or test that proved it.

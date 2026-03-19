@@ -1,0 +1,20 @@
+name: django
+role: backend
+libraries:
+  - django
+  - pytest-django
+research_queries:
+  - Django transaction and select_related prefetch_related best practices
+  - Django service layer and form validation boundaries
+  - Django integration test patterns for auth and background work
+detect:
+  - type: file_exists
+    any_of:
+      - manage.py
+  - type: file_contains_any
+    paths:
+      - requirements.txt
+      - pyproject.toml
+    any_of:
+      - django
+      - Django
