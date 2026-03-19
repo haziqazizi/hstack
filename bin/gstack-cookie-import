@@ -1,0 +1,83 @@
+#!/usr/bin/env bun
+import { findInstalledBrowsers, listDomains, importCookies, toAgentBrowserCommands, CookieImportError } from './gstack-cookie-import-lib.ts';
+
+function usage(): string {
+  return [
+    'Usage:',
+    '  gstack-cookie-import --list-browsers',
+    '  gstack-cookie-import <browser> --list-domains [--profile <name>]',
+    '  gstack-cookie-import <browser> --domain <domain> [--domain <domain> ...] [--profile <name>]',
+    '',
+    'Examples:',
+    '  gstack-cookie-import chrome --list-domains',
+    '  gstack-cookie-import chrome --domain .github.com',
+    '  gstack-cookie-import comet --domain github.com --domain .stripe.com',
+  ].join('\n');
+}
+
+function normalizeDomain(domain: string): string {
+  const trimmed = domain.trim();
+  if (trimmed.startsWith('.')) return trimmed;
+  return `.${trimmed}`;
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+    console.log(usage());
+    process.exit(0);
+  }
+
+  if (args[0] === '--list-browsers') {
+    for (const browser of findInstalledBrowsers()) {
+      console.log(`${browser.aliases[0]}\t${browser.name}`);
+    }
+    process.exit(0);
+  }
+
+  const browser = args[0];
+  let profile = 'Default';
+  const domains: string[] = [];
+  let listOnly = false;
+
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--profile') {
+      profile = args[++i] || profile;
+    } else if (arg === '--domain') {
+      const value = args[++i];
+      if (!value) throw new CookieImportError('Missing value for --domain', 'bad_request');
+      domains.push(normalizeDomain(value));
+    } else if (arg === '--list-domains') {
+      listOnly = true;
+    } else {
+      throw new CookieImportError(`Unknown argument: ${arg}`, 'bad_request');
+    }
+  }
+
+  if (listOnly) {
+    const result = listDomains(browser, profile);
+    for (const entry of result.domains) {
+      console.log(`${entry.domain}\t${entry.count}`);
+    }
+    process.exit(0);
+  }
+
+  if (domains.length === 0) {
+    throw new CookieImportError('At least one --domain is required unless using --list-domains', 'bad_request');
+  }
+
+  const result = await importCookies(browser, domains, profile);
+  for (const line of toAgentBrowserCommands(result.cookies)) {
+    console.log(line);
+  }
+}
+
+main().catch((err) => {
+  if (err instanceof CookieImportError) {
+    console.error(err.message);
+    process.exit(1);
+  }
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+});
