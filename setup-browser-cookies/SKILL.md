@@ -3,8 +3,7 @@ name: setup-browser-cookies
 version: 1.0.0
 description: |
   Import cookies from your real browser (Comet, Chrome, Arc, Brave, Edge) into the
-  headless browse session. Opens an interactive picker UI where you select which
-  cookie domains to import. Use before QA testing authenticated pages. Use when asked
+  active agent-browser session. Use before QA testing authenticated pages. Use when asked
   to "import cookies", "login to the site", or "authenticate the browser".
 allowed-tools:
   - Bash
@@ -94,7 +93,7 @@ If `_CONTRIB` is `true`: you are in **contributor mode**. You're a gstack user w
 
 **At the end of each major workflow step** (not after every single command), reflect on the gstack tooling you used. Rate your experience 0 to 10. If it wasn't a 10, think about why. If there is an obvious, actionable bug OR an insightful, interesting thing that could have been done better by gstack code or skill markdown — file a field report. Maybe our contributor will help make us better!
 
-**Calibration — this is the bar:** For example, `$B js "await fetch(...)"` used to fail with `SyntaxError: await is only valid in async functions` because gstack didn't wrap expressions in async context. Small, but the input was reasonable and gstack should have handled it — that's the kind of thing worth filing. Things less consequential than this, ignore.
+**Calibration — this is the bar:** For example, `$AB eval 'await fetch(...)'` fails with `SyntaxError: await is only valid in async functions` because agent-browser doesn't wrap expressions in async context. Small, but the input was reasonable and gstack should have documented the right `eval --stdin` pattern — that's the kind of thing worth filing. Things less consequential than this, ignore.
 
 **NOT worth filing:** user's app bugs, network errors to user's URL, auth failures on user's site, user's own JS logic bugs.
 
@@ -152,76 +151,89 @@ RECOMMENDATION: [what the user should do next]
 
 # Setup Browser Cookies
 
-Import logged-in sessions from your real Chromium browser into the headless browse session.
+Import logged-in sessions from your real Chromium browser into the active agent-browser session.
 
 ## How it works
 
-1. Find the browse binary
-2. Run `cookie-import-browser` to detect installed browsers and open the picker UI
-3. User selects which cookie domains to import in their browser
-4. Cookies are decrypted and loaded into the Playwright session
+1. Find agent-browser and create the `$AB` session alias
+2. Run `gstack-cookie-import` to decrypt cookies from a Chromium profile
+3. Pipe the emitted `cookies set ...` commands into `$AB`
+4. Verify imported cookies with `$AB cookies`
 
 ## Steps
 
-### 1. Find the browse binary
+### 1. Find agent-browser
 
 ## SETUP (run this check BEFORE any browse command)
 
 ```bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B=~/.claude/skills/gstack/browse/dist/browse
-if [ -x "$B" ]; then
-  echo "READY: $B"
+if command -v agent-browser >/dev/null 2>&1; then
+  _AB_VER=$(agent-browser --version 2>/dev/null | awk '{print $2}')
+  case "$_AB_VER" in
+    0.15.*|0.16.*|0.17.*|1.*)
+      AB="agent-browser --session gstack-$PPID"
+      GCI=~/.claude/skills/gstack/bin/gstack-cookie-import
+      [ -x "$GCI" ] || GCI=.claude/skills/gstack/bin/gstack-cookie-import
+      $AB close >/dev/null 2>&1 || true
+      echo "READY: $AB"
+      ;;
+    *)
+      echo "NEEDS_UPDATE: $_AB_VER"
+      ;;
+  esac
 else
   echo "NEEDS_SETUP"
 fi
 ```
 
 If `NEEDS_SETUP`:
-1. Tell the user: "gstack browse needs a one-time build (~10 seconds). OK to proceed?" Then STOP and wait.
-2. Run: `cd <SKILL_DIR> && ./setup`
-3. If `bun` is not installed: `curl -fsSL https://bun.sh/install | bash`
+1. Tell the user: "agent-browser needs a one-time install. OK to proceed?" Then STOP and wait.
+2. Run: `npm install -g agent-browser && agent-browser install`
 
-### 2. Open the cookie picker
+If `NEEDS_UPDATE <version>`:
+1. Tell the user: "gstack expects agent-browser 0.15.x+ but found <version>. OK to update?" Then STOP and wait.
+2. Run: `npm install -g agent-browser@latest && agent-browser install`
 
-```bash
-$B cookie-import-browser
-```
+When setup succeeds, use `$AB <command>` in subsequent bash blocks.
 
-This auto-detects installed Chromium browsers (Comet, Chrome, Arc, Brave, Edge) and opens
-an interactive picker UI in your default browser where you can:
-- Switch between installed browsers
-- Search domains
-- Click "+" to import a domain's cookies
-- Click trash to remove imported cookies
+### 2. Direct import
 
-Tell the user: **"Cookie picker opened — select the domains you want to import in your browser, then tell me when you're done."**
-
-### 3. Direct import (alternative)
-
-If the user specifies a domain directly (e.g., `/setup-browser-cookies github.com`), skip the UI:
+If the user specifies a browser and domain directly, import immediately:
 
 ```bash
-$B cookie-import-browser comet --domain github.com
+$GCI comet --domain github.com | while read -r line; do
+  $AB $line
+done
 ```
 
-Replace `comet` with the appropriate browser if specified.
+Replace `comet` with `chrome`, `arc`, `brave`, or `edge` as needed.
+
+### 3. Guided import
+
+If the user did not specify a browser/domain, ask which browser and which domain(s) to import,
+then run the same command for each requested domain.
+
+Example:
+
+```bash
+$GCI chrome --domain .github.com | while read -r line; do
+  $AB $line
+done
+```
+
+Tell the user: **"Cookie import finished. I'll verify what landed in the session now."**
 
 ### 4. Verify
 
-After the user confirms they're done:
-
 ```bash
-$B cookies
+$AB cookies
 ```
 
-Show the user a summary of imported cookies (domain counts).
+Show the user a summary of imported cookies (domain counts if the command output includes them).
 
 ## Notes
 
 - First import per browser may trigger a macOS Keychain dialog — click "Allow" / "Always Allow"
-- Cookie picker is served on the same port as the browse server (no extra process)
-- Only domain names and cookie counts are shown in the UI — no cookie values are exposed
-- The browse session persists cookies between commands, so imported cookies work immediately
+- This flow is CLI-only — there is no picker UI anymore
+- `gstack-cookie-import` never prints cookie values to the user-facing summary
+- The active agent-browser session persists cookies between commands, so imported cookies work immediately

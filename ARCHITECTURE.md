@@ -12,7 +12,7 @@ The key insight: an AI agent interacting with a browser needs **sub-second laten
 Claude Code                     gstack
 ─────────                      ──────
                                ┌──────────────────────┐
-  Tool call: $B snapshot -i    │  CLI (compiled binary)│
+  Tool call: $AB snapshot -i   │  agent-browser daemon │
   ─────────────────────────→   │  • reads state file   │
                                │  • POST /command      │
                                │    to localhost:PORT   │
@@ -116,7 +116,7 @@ Refs (`@e1`, `@e2`, `@c1`) are how the agent addresses page elements without wri
 ### How it works
 
 ```
-1. Agent runs: $B snapshot -i
+1. Agent runs: $AB snapshot -i
 2. Server calls Playwright's page.accessibility.snapshot()
 3. Parser walks the ARIA tree, assigns sequential refs: @e1, @e2, @e3...
 4. For each ref, builds a Playwright Locator: getByRole(role, { name }).nth(index)
@@ -124,7 +124,7 @@ Refs (`@e1`, `@e2`, `@c1`) are how the agent addresses page elements without wri
 6. Returns the annotated tree as plain text
 
 Later:
-7. Agent runs: $B click @e3
+7. Agent runs: $AB click @e3
 8. Server resolves @e3 → Locator → locator.click()
 ```
 

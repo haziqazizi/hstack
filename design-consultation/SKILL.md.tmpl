@@ -96,19 +96,19 @@ Use WebSearch to find 5-10 products in their space. Search for:
 
 **Step 2: Visual research via browse (if available)**
 
-If the browse binary is available (`$B` is set), visit the top 3-5 sites in the space and capture visual evidence:
+If the browser alias is available (`$AB` is set), visit the top 3-5 sites in the space and capture visual evidence:
 
 ```bash
-$B goto "https://example-site.com"
-$B screenshot "/tmp/design-research-site-name.png"
-$B snapshot
+$AB goto "https://example-site.com"
+$AB screenshot "/tmp/design-research-site-name.png"
+$AB snapshot
 ```
 
 For each site, analyze: fonts actually used, color palette, layout approach, spacing density, aesthetic direction. The screenshot gives you the feel; the snapshot gives you structural data.
 
 If a site blocks the headless browser or requires login, skip it and note why.
 
-If browse is not available, rely on WebSearch results and your built-in design knowledge — this is fine.
+If the browser alias is not available, rely on WebSearch results and your built-in design knowledge — this is fine.
 
 **Step 3: Synthesize findings**
 

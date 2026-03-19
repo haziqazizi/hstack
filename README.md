@@ -154,7 +154,7 @@ One sprint, one person, one feature — that takes about 30 minutes with gstack.
 
 **`/document-release` is the engineer you never had.** It reads every doc file in your project, cross-references the diff, and updates everything that drifted. README, ARCHITECTURE, CONTRIBUTING, CLAUDE.md, TODOS — all kept current automatically. And now `/ship` auto-invokes it — docs stay current without an extra command.
 
-**Browser handoff when the AI gets stuck.** Hit a CAPTCHA, auth wall, or MFA prompt? `$B handoff` opens a visible Chrome at the exact same page with all your cookies and tabs intact. Solve the problem, tell Claude you're done, `$B resume` picks up right where it left off. The agent even suggests it automatically after 3 consecutive failures.
+**Headed browser fallback when the AI gets stuck.** Hit a CAPTCHA, auth wall, or MFA prompt? `/browse` now uses a session-scoped `agent-browser` session (`$AB`) and can open a headed browser on the same session so you can finish the wall manually, then continue from a fresh snapshot without starting over.
 
 **Multi-AI second opinion.** `/codex` gets an independent review from OpenAI's Codex CLI — a completely different AI looking at the same diff. Three modes: code review with a pass/fail gate, adversarial challenge that actively tries to break your code, and open consultation with session continuity. When both `/review` (Claude) and `/codex` (OpenAI) have reviewed the same branch, you get a cross-model analysis showing which findings overlap and which are unique to each.
 
@@ -202,7 +202,7 @@ Fifteen specialists and six power tools. All slash commands. All Markdown. All f
 
 **Skill not showing up?** `cd ~/.claude/skills/gstack && ./setup`
 
-**`/browse` fails?** `cd ~/.claude/skills/gstack && bun install && bun run build`
+**`/browse` fails?** First run `cd ~/.claude/skills/gstack && ./setup`. If setup says `agent-browser` is missing, install it with `npm install -g agent-browser && agent-browser install`.
 
 **Stale install?** Run `/gstack-upgrade` — or set `auto_upgrade: true` in `~/.gstack/config.yaml`
 
@@ -212,8 +212,13 @@ Fifteen specialists and six power tools. All slash commands. All Markdown. All f
 ## gstack
 Use /browse from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.
 Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
+<<<<<<< HEAD
 /design-consultation, /review, /ship, /browse, /qa, /qa-report, /design-review,
 /setup-browser-cookies, /retro, /investigate, /document-release, /codex, /careful,
+=======
+/design-consultation, /review, /ship, /browse, /qa, /qa-report, /design-review,
+/setup-browser-cookies, /retro, /investigate, /document-release, /codex, /careful,
+>>>>>>> d63b70f (docs(browser): refresh legacy browser references)
 /freeze, /guard, /unfreeze, /gstack-upgrade.
 ```
 

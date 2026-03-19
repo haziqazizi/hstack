@@ -102,7 +102,7 @@ If `_CONTRIB` is `true`: you are in **contributor mode**. You're a gstack user w
 
 **At the end of each major workflow step** (not after every single command), reflect on the gstack tooling you used. Rate your experience 0 to 10. If it wasn't a 10, think about why. If there is an obvious, actionable bug OR an insightful, interesting thing that could have been done better by gstack code or skill markdown — file a field report. Maybe our contributor will help make us better!
 
-**Calibration — this is the bar:** For example, `$B js "await fetch(...)"` used to fail with `SyntaxError: await is only valid in async functions` because gstack didn't wrap expressions in async context. Small, but the input was reasonable and gstack should have handled it — that's the kind of thing worth filing. Things less consequential than this, ignore.
+**Calibration — this is the bar:** For example, `$AB eval 'await fetch(...)'` fails with `SyntaxError: await is only valid in async functions` because agent-browser doesn't wrap expressions in async context. Small, but the input was reasonable and gstack should have documented the right `eval --stdin` pattern — that's the kind of thing worth filing. Things less consequential than this, ignore.
 
 **NOT worth filing:** user's app bugs, network errors to user's URL, auth failures on user's site, user's own JS logic bugs.
 
@@ -204,21 +204,34 @@ After the user chooses, execute their choice (commit or stash), then continue wi
 ## SETUP (run this check BEFORE any browse command)
 
 ```bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B=~/.claude/skills/gstack/browse/dist/browse
-if [ -x "$B" ]; then
-  echo "READY: $B"
+if command -v agent-browser >/dev/null 2>&1; then
+  _AB_VER=$(agent-browser --version 2>/dev/null | awk '{print $2}')
+  case "$_AB_VER" in
+    0.15.*|0.16.*|0.17.*|1.*)
+      AB="agent-browser --session gstack-$PPID"
+      GCI=~/.claude/skills/gstack/bin/gstack-cookie-import
+      [ -x "$GCI" ] || GCI=.claude/skills/gstack/bin/gstack-cookie-import
+      $AB close >/dev/null 2>&1 || true
+      echo "READY: $AB"
+      ;;
+    *)
+      echo "NEEDS_UPDATE: $_AB_VER"
+      ;;
+  esac
 else
   echo "NEEDS_SETUP"
 fi
 ```
 
 If `NEEDS_SETUP`:
-1. Tell the user: "gstack browse needs a one-time build (~10 seconds). OK to proceed?" Then STOP and wait.
-2. Run: `cd <SKILL_DIR> && ./setup`
-3. If `bun` is not installed: `curl -fsSL https://bun.sh/install | bash`
+1. Tell the user: "agent-browser needs a one-time install. OK to proceed?" Then STOP and wait.
+2. Run: `npm install -g agent-browser && agent-browser install`
+
+If `NEEDS_UPDATE <version>`:
+1. Tell the user: "gstack expects agent-browser 0.15.x+ but found <version>. OK to update?" Then STOP and wait.
+2. Run: `npm install -g agent-browser@latest && agent-browser install`
+
+When setup succeeds, use `$AB <command>` in subsequent bash blocks.
 
 **Check test framework (bootstrap if needed):**
 
@@ -414,7 +427,7 @@ Run full audit, then load previous `design-baseline.json`. Compare: per-category
 The most uniquely designer-like output. Form a gut reaction before analyzing anything.
 
 1. Navigate to the target URL
-2. Take a full-page desktop screenshot: `$B screenshot "$REPORT_DIR/screenshots/first-impression.png"`
+2. Take a full-page desktop screenshot: `$AB screenshot "$REPORT_DIR/screenshots/first-impression.png"`
 3. Write the **First Impression** using this structured critique format:
    - "The site communicates **[what]**." (what it says at a glance — competence? playfulness? confusion?)
    - "I notice **[observation]**." (what stands out, positive or negative — be specific)
@@ -431,19 +444,27 @@ Extract the actual design system the site uses (not what a DESIGN.md says, but w
 
 ```bash
 # Fonts in use (capped at 500 elements to avoid timeout)
-$B js "JSON.stringify([...new Set([...document.querySelectorAll('*')].slice(0,500).map(e => getComputedStyle(e).fontFamily))])"
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify([...new Set([...document.querySelectorAll('*')].slice(0,500).map(e => getComputedStyle(e).fontFamily))])
+EVALEOF
 
 # Color palette in use
-$B js "JSON.stringify([...new Set([...document.querySelectorAll('*')].slice(0,500).flatMap(e => [getComputedStyle(e).color, getComputedStyle(e).backgroundColor]).filter(c => c !== 'rgba(0, 0, 0, 0)'))])"
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify([...new Set([...document.querySelectorAll('*')].slice(0,500).flatMap(e => [getComputedStyle(e).color, getComputedStyle(e).backgroundColor]).filter(c => c !== 'rgba(0, 0, 0, 0)'))])
+EVALEOF
 
 # Heading hierarchy
-$B js "JSON.stringify([...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map(h => ({tag:h.tagName, text:h.textContent.trim().slice(0,50), size:getComputedStyle(h).fontSize, weight:getComputedStyle(h).fontWeight})))"
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify([...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map(h => ({tag:h.tagName, text:h.textContent.trim().slice(0,50), size:getComputedStyle(h).fontSize, weight:getComputedStyle(h).fontWeight})))
+EVALEOF
 
 # Touch target audit (find undersized interactive elements)
-$B js "JSON.stringify([...document.querySelectorAll('a,button,input,[role=button]')].filter(e => {const r=e.getBoundingClientRect(); return r.width>0 && (r.width<44||r.height<44)}).map(e => ({tag:e.tagName, text:(e.textContent||'').trim().slice(0,30), w:Math.round(e.getBoundingClientRect().width), h:Math.round(e.getBoundingClientRect().height)})).slice(0,20))"
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify([...document.querySelectorAll('a,button,input,[role=button]')].filter(e => {const r=e.getBoundingClientRect(); return r.width>0 && (r.width<44||r.height<44)}).map(e => ({tag:e.tagName, text:(e.textContent||'').trim().slice(0,30), w:Math.round(e.getBoundingClientRect().width), h:Math.round(e.getBoundingClientRect().height)})).slice(0,20))
+EVALEOF
 
 # Performance baseline
-$B perf
+$AB eval 'JSON.stringify(performance.timing)'
 ```
 
 Structure findings as an **Inferred Design System**:
@@ -461,18 +482,21 @@ After extraction, offer: *"Want me to save this as your DESIGN.md? I can lock in
 For each page in scope:
 
 ```bash
-$B goto <url>
-$B snapshot -i -a -o "$REPORT_DIR/screenshots/{page}-annotated.png"
-$B responsive "$REPORT_DIR/screenshots/{page}"
-$B console --errors
-$B perf
+$AB open <url>
+$AB screenshot --annotate "$REPORT_DIR/screenshots/{page}-annotated.png"
+$AB snapshot -i
+$AB set viewport 375 812 && $AB screenshot "$REPORT_DIR/screenshots/{page}-mobile.png"
+$AB set viewport 768 1024 && $AB screenshot "$REPORT_DIR/screenshots/{page}-tablet.png"
+$AB set viewport 1280 720 && $AB screenshot "$REPORT_DIR/screenshots/{page}-desktop.png"
+$AB errors
+$AB eval 'JSON.stringify(performance.timing)'
 ```
 
 ### Auth Detection
 
 After the first navigation, check if the URL changed to a login-like path:
 ```bash
-$B url
+$AB get url
 ```
 If URL contains `/login`, `/signin`, `/auth`, or `/sso`: the site requires authentication. AskUserQuestion: "This site requires authentication. Want to import cookies from your browser? Run `/setup-browser-cookies` first if needed."
 
@@ -499,7 +523,7 @@ Apply these at each page. Each finding gets an impact rating (high/medium/polish
 - Weight contrast: >=2 weights used for hierarchy
 - No blacklisted fonts (Papyrus, Comic Sans, Lobster, Impact, Jokerman)
 - If primary font is Inter/Roboto/Open Sans/Poppins → flag as potentially generic
-- `text-wrap: balance` or `text-pretty` on headings (check via `$B css <heading> text-wrap`)
+- `text-wrap: balance` or `text-pretty` on headings (check via `$AB get styles <heading>`)
 - Curly quotes used, not straight quotes
 - Ellipsis character (`…`) not three dots (`...`)
 - `font-variant-numeric: tabular-nums` on number columns
@@ -559,7 +583,7 @@ Apply these at each page. Each finding gets an impact rating (high/medium/polish
 - Easing: ease-out for entering, ease-in for exiting, ease-in-out for moving
 - Duration: 50-700ms range (nothing slower unless page transition)
 - Purpose: every animation communicates something (state change, attention, spatial relationship)
-- `prefers-reduced-motion` respected (check: `$B js "matchMedia('(prefers-reduced-motion: reduce)').matches"`)
+- `prefers-reduced-motion` respected (check: `$AB eval "matchMedia('(prefers-reduced-motion: reduce)').matches"`)
 - No `transition: all` — properties listed explicitly
 - Only `transform` and `opacity` animated (not layout properties like width, height, top, left)
 
@@ -603,9 +627,10 @@ The test: would a human designer at a respected studio ever ship this?
 Walk 2-3 key user flows and evaluate the *feel*, not just the function:
 
 ```bash
-$B snapshot -i
-$B click @e3           # perform action
-$B snapshot -D          # diff to see what changed
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+$AB click @e3           # perform action
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
 ```
 
 Evaluate:
@@ -715,7 +740,7 @@ Tie everything to user goals and product objectives. Always suggest specific imp
 8. **Responsive is design, not just "not broken."** A stacked desktop layout on mobile is not responsive design — it's lazy. Evaluate whether the mobile layout makes *design* sense.
 9. **Document incrementally.** Write each finding to the report as you find it. Don't batch.
 10. **Depth over breadth.** 5-10 well-documented findings with screenshots and specific suggestions > 20 vague observations.
-11. **Show screenshots to the user.** After every `$B screenshot`, `$B snapshot -a -o`, or `$B responsive` command, use the Read tool on the output file(s) so the user can see them inline. For `responsive` (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.
+11. **Show screenshots to the user.** After every `$AB screenshot`, `$AB screenshot --annotate`, or responsive screenshot sequence, use the Read tool on the output file(s) so the user can see them inline. For responsive checks (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.
 
 Record baseline design score and AI slop score at end of Phase 6.
 
@@ -789,10 +814,10 @@ git commit -m "style(design): FINDING-NNN — short description"
 Navigate back to the affected page and verify the fix:
 
 ```bash
-$B goto <affected-url>
-$B screenshot "$REPORT_DIR/screenshots/finding-NNN-after.png"
-$B console --errors
-$B snapshot -D
+$AB goto <affected-url>
+$AB screenshot "$REPORT_DIR/screenshots/finding-NNN-after.png"
+$AB console --errors
+$AB snapshot -D
 ```
 
 Take **before/after screenshot pair** for every fix.

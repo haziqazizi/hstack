@@ -38,8 +38,6 @@ echo "BRANCH: $_BRANCH"
 echo "PROACTIVE: $_PROACTIVE"
 _LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
-_EXA=$(~/.claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || .claude/skills/gstack/bin/gstack-web-search --check 2>/dev/null || echo "EXA_MISSING")
-echo "EXA_SEARCH: $_EXA"
 mkdir -p ~/.gstack/analytics
 echo '{"skill":"qa","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```
@@ -160,28 +158,7 @@ ATTEMPTED: [what you tried]
 RECOMMENDATION: [what the user should do next]
 ```
 
-## Web Search (Exa)
 
-If the preamble printed `EXA_SEARCH: EXA_READY`, Exa web search is available. Use the gstack CLI for all web research:
-
-**Search the web:**
-```bash
-~/.claude/skills/gstack/bin/gstack-web-search "your search query"
-~/.claude/skills/gstack/bin/gstack-web-search "your query" --results 10
-~/.claude/skills/gstack/bin/gstack-web-search "your query" --contents          # include full page text
-~/.claude/skills/gstack/bin/gstack-web-search "your query" --category news     # filter: company, research paper, news, pdf, github, tweet, personal site
-~/.claude/skills/gstack/bin/gstack-web-search "your query" --domain github.com # restrict to domain
-```
-
-**Read a specific URL:**
-```bash
-~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page"
-~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page" --max-chars 20000
-```
-
-If `EXA_SEARCH: EXA_MISSING`, web search is not configured. Tell the user:
-"Web search is not available — run \`./setup\` in the gstack directory to add your Exa API key, or add it manually: \`echo 'EXA_API_KEY=your-key' >> ~/.gstack/.env\`"
-Then continue without web search — use local docs and Context7 only.
 
 ## Step 0: Detect base branch
 
@@ -319,11 +296,11 @@ If user picks H → write `.gstack/no-test-bootstrap` and continue without tests
 
 ### B2. Research best practices
 
-Use `gstack-web-search` to find current best practices for the detected runtime:
+Use WebSearch to find current best practices for the detected runtime:
 - `"[runtime] best test framework 2025 2026"`
 - `"[framework A] vs [framework B] comparison"`
 
-If Exa web search is unavailable (EXA_MISSING), use this built-in knowledge table:
+If WebSearch is unavailable, use this built-in knowledge table:
 
 | Runtime | Primary recommendation | Alternative |
 |---------|----------------------|-------------|

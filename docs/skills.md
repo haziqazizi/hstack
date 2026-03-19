@@ -593,7 +593,7 @@ This is my **QA engineer mode**.
 
 `/browse` is the skill that closes the loop. Before it, the agent could think and code but was still half blind. It had to guess about UI state, auth flows, redirects, console errors, empty states, and broken layouts. Now it can just go look.
 
-It is a compiled binary that talks to a persistent Chromium daemon — built on [Playwright](https://playwright.dev/) by Microsoft. First call starts the browser (~3s). Every call after that: ~100-200ms. The browser stays running between commands, so cookies, tabs, and localStorage carry over.
+It now shells out to [agent-browser](https://www.npmjs.com/package/agent-browser) through a session-scoped `$AB` alias (`agent-browser --session gstack-$PPID`). First call starts the browser (~3s). Every call after that: ~100-200ms. The browser session stays alive between commands, so cookies, tabs, and localStorage carry over.
 
 ### Example
 
@@ -603,20 +603,21 @@ You:   /browse staging.myapp.com — log in, test the signup flow, and check
 
 Claude: [18 tool calls, ~60 seconds]
 
-        > browse goto https://staging.myapp.com/signup
-        > browse snapshot -i
-        > browse fill @e2 "test@example.com"
-        > browse fill @e3 "password123"
-        > browse click @e5                    (Submit)
-        > browse screenshot /tmp/signup.png
+        > AB="agent-browser --session gstack-$PPID"
+        > $AB open https://staging.myapp.com/signup
+        > $AB snapshot -i
+        > $AB fill @e2 "test@example.com"
+        > $AB fill @e3 "password123"
+        > $AB click @e5                    (Submit)
+        > $AB screenshot /tmp/signup.png
         > Read /tmp/signup.png
 
         Signup works. Redirected to onboarding. Now checking changed pages.
 
-        > browse goto https://staging.myapp.com/dashboard
-        > browse screenshot /tmp/dashboard.png
+        > $AB open https://staging.myapp.com/dashboard
+        > $AB screenshot /tmp/dashboard.png
         > Read /tmp/dashboard.png
-        > browse console
+        > $AB console
 
         Dashboard loads. No console errors. Charts render with sample data.
 
@@ -626,28 +627,27 @@ Claude: [18 tool calls, ~60 seconds]
 
 18 tool calls, about a minute. Full QA pass. No browser opened.
 
-### Browser handoff
+### Headed browser fallback
 
-When the headless browser gets stuck — CAPTCHA, MFA, complex auth — hand off to the user:
+When the headless browser gets stuck — CAPTCHA, MFA, complex auth — the skill can switch to a headed browser on the same session and let the user finish the wall:
 
 ```
-Claude: I'm stuck on a CAPTCHA at the login page. Opening a visible
-        Chrome so you can solve it.
+Claude: I'm stuck on a CAPTCHA at the login page. Opening a headed
+        browser on the same session so you can solve it.
 
-        > browse handoff "Stuck on CAPTCHA at login page"
+        > AB="agent-browser --session gstack-$PPID"
+        > $AB --headed open https://app.example.com/login
 
-        Chrome opened at https://app.example.com/login with all your
-        cookies and tabs intact. Solve the CAPTCHA and tell me when
-        you're done.
+        Finish the CAPTCHA and tell me when you're done.
 
 You:    done
 
-Claude: > browse resume
+Claude: > $AB snapshot -i
 
         Got a fresh snapshot. Logged in successfully. Continuing QA.
 ```
 
-The browser preserves all state (cookies, localStorage, tabs) across the handoff. After `resume`, the agent gets a fresh snapshot of wherever you left off. If the browse tool fails 3 times in a row, it automatically suggests using `handoff`.
+If the user already has Chrome running with remote debugging enabled, gstack can attach with `agent-browser --session gstack-$PPID --auto-connect ...` instead of launching a fresh headed window.
 
 **Security note:** `/browse` runs a persistent Chromium session. Cookies, localStorage, and session state carry over between commands. Do not use it against sensitive production environments unless you intend to — it is a real browser with real state. The session auto-shuts down after 30 minutes of idle time.
 
@@ -661,7 +661,7 @@ This is my **session manager mode**.
 
 Before `/qa` or `/browse` can test authenticated pages, they need cookies. Instead of manually logging in through the headless browser every time, `/setup-browser-cookies` imports your real sessions directly from your daily browser.
 
-It auto-detects installed Chromium browsers (Comet, Chrome, Arc, Brave, Edge), decrypts cookies via the macOS Keychain, and loads them into the Playwright session. An interactive picker UI lets you choose exactly which domains to import — no cookie values are ever displayed.
+It auto-detects installed Chromium browsers (Comet, Chrome, Arc, Brave, Edge), decrypts cookies via the macOS Keychain, and loads them into the active agent-browser session. An interactive picker UI lets you choose exactly which domains to import — no cookie values are ever displayed.
 
 ```
 You:   /setup-browser-cookies
@@ -783,7 +783,7 @@ Claude: Current version: 0.7.4
         Latest version: 0.8.2
 
         What's new:
-        - Browse handoff for CAPTCHAs and auth walls
+        - Headed browser fallback for CAPTCHAs and auth walls
         - /codex multi-AI second opinion
         - /qa always uses browser now
         - Safety skills: /careful, /freeze, /guard

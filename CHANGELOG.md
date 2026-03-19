@@ -1,5 +1,8 @@
 # Changelog
 
+> Historical note: older entries may mention legacy names from before the 2026-03-19 browser migration. `$B` was the old browser alias (replaced by the session-scoped `$AB` / `agent-browser` flow), `/qa-only` was renamed to `/qa-report`, and `browse/src/*` / `browse/dist/browse` referred to the retired in-repo browser runtime.
+
+
 ## [0.8.5] - 2026-03-19
 
 ### Fixed

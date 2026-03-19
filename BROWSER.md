@@ -1,271 +1,256 @@
-# Browser — technical details
+# Browser Reference
 
-This document covers the command reference and internals of gstack's headless browser.
+This document covers the **current** `/browse` stack in gstack.
 
-## Command reference
-
-| Category | Commands | What for |
-|----------|----------|----------|
-| Navigate | `goto`, `back`, `forward`, `reload`, `url` | Get to a page |
-| Read | `text`, `html`, `links`, `forms`, `accessibility` | Extract content |
-| Snapshot | `snapshot [-i] [-c] [-d N] [-s sel] [-D] [-a] [-o] [-C]` | Get refs, diff, annotate |
-| Interact | `click`, `fill`, `select`, `hover`, `type`, `press`, `scroll`, `wait`, `viewport`, `upload` | Use the page |
-| Inspect | `js`, `eval`, `css`, `attrs`, `is`, `console`, `network`, `dialog`, `cookies`, `storage`, `perf` | Debug and verify |
-| Visual | `screenshot [--viewport] [--clip x,y,w,h] [sel\|@ref] [path]`, `pdf`, `responsive` | See what Claude sees |
-| Compare | `diff <url1> <url2>` | Spot differences between environments |
-| Dialogs | `dialog-accept [text]`, `dialog-dismiss` | Control alert/confirm/prompt handling |
-| Tabs | `tabs`, `tab`, `newtab`, `closetab` | Multi-page workflows |
-| Cookies | `cookie-import`, `cookie-import-browser` | Import cookies from file or real browser |
-| Multi-step | `chain` (JSON from stdin) | Batch commands in one call |
-| Handoff | `handoff [reason]`, `resume` | Switch to visible Chrome for user takeover |
-
-All selector arguments accept CSS selectors, `@e` refs after `snapshot`, or `@c` refs after `snapshot -C`. 50+ commands total plus cookie import.
-
-## How it works
-
-gstack's browser is a compiled CLI binary that talks to a persistent local Chromium daemon over HTTP. The CLI is a thin client — it reads a state file, sends a command, and prints the response to stdout. The server does the real work via [Playwright](https://playwright.dev/).
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Claude Code                                                    │
-│                                                                 │
-│  "browse goto https://staging.myapp.com"                        │
-│       │                                                         │
-│       ▼                                                         │
-│  ┌──────────┐    HTTP POST     ┌──────────────┐                 │
-│  │ browse   │ ──────────────── │ Bun HTTP     │                 │
-│  │ CLI      │  localhost:rand  │ server       │                 │
-│  │          │  Bearer token    │              │                 │
-│  │ compiled │ ◄──────────────  │  Playwright  │──── Chromium    │
-│  │ binary   │  plain text      │  API calls   │    (headless)   │
-│  └──────────┘                  └──────────────┘                 │
-│   ~1ms startup                  persistent daemon               │
-│                                 auto-starts on first call       │
-│                                 auto-stops after 30 min idle    │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Lifecycle
-
-1. **First call**: CLI checks `.gstack/browse.json` (in the project root) for a running server. None found — it spawns `bun run browse/src/server.ts` in the background. The server launches headless Chromium via Playwright, picks a random port (10000-60000), generates a bearer token, writes the state file, and starts accepting HTTP requests. This takes ~3 seconds.
-
-2. **Subsequent calls**: CLI reads the state file, sends an HTTP POST with the bearer token, prints the response. ~100-200ms round trip.
-
-3. **Idle shutdown**: After 30 minutes with no commands, the server shuts down and cleans up the state file. Next call restarts it automatically.
-
-4. **Crash recovery**: If Chromium crashes, the server exits immediately (no self-healing — don't hide failure). The CLI detects the dead server on the next call and starts a fresh one.
-
-### Key components
-
-```
-browse/
-├── src/
-│   ├── cli.ts              # Thin client — reads state file, sends HTTP, prints response
-│   ├── server.ts           # Bun.serve HTTP server — routes commands to Playwright
-│   ├── browser-manager.ts  # Chromium lifecycle — launch, tabs, ref map, crash handling
-│   ├── snapshot.ts         # Accessibility tree → @ref assignment → Locator map + diff/annotate/-C
-│   ├── read-commands.ts    # Non-mutating commands (text, html, links, js, css, is, dialog, etc.)
-│   ├── write-commands.ts   # Mutating commands (click, fill, select, upload, dialog-accept, etc.)
-│   ├── meta-commands.ts    # Server management, chain, diff, snapshot routing
-│   ├── cookie-import-browser.ts  # Decrypt + import cookies from real Chromium browsers
-│   ├── cookie-picker-routes.ts   # HTTP routes for interactive cookie picker UI
-│   ├── cookie-picker-ui.ts       # Self-contained HTML/CSS/JS for cookie picker
-│   └── buffers.ts          # CircularBuffer<T> + console/network/dialog capture
-├── test/                   # Integration tests + HTML fixtures
-└── dist/
-    └── browse              # Compiled binary (~58MB, Bun --compile)
-```
-
-### The snapshot system
-
-The browser's key innovation is ref-based element selection, built on Playwright's accessibility tree API:
-
-1. `page.locator(scope).ariaSnapshot()` returns a YAML-like accessibility tree
-2. The snapshot parser assigns refs (`@e1`, `@e2`, ...) to each element
-3. For each ref, it builds a Playwright `Locator` (using `getByRole` + nth-child)
-4. The ref-to-Locator map is stored on `BrowserManager`
-5. Later commands like `click @e3` look up the Locator and call `locator.click()`
-
-No DOM mutation. No injected scripts. Just Playwright's native accessibility API.
-
-**Ref staleness detection:** SPAs can mutate the DOM without navigation (React router, tab switches, modals). When this happens, refs collected from a previous `snapshot` may point to elements that no longer exist. To handle this, `resolveRef()` runs an async `count()` check before using any ref — if the element count is 0, it throws immediately with a message telling the agent to re-run `snapshot`. This fails fast (~5ms) instead of waiting for Playwright's 30-second action timeout.
-
-**Extended snapshot features:**
-- `--diff` (`-D`): Stores each snapshot as a baseline. On the next `-D` call, returns a unified diff showing what changed. Use this to verify that an action (click, fill, etc.) actually worked.
-- `--annotate` (`-a`): Injects temporary overlay divs at each ref's bounding box, takes a screenshot with ref labels visible, then removes the overlays. Use `-o <path>` to control the output path.
-- `--cursor-interactive` (`-C`): Scans for non-ARIA interactive elements (divs with `cursor:pointer`, `onclick`, `tabindex>=0`) using `page.evaluate`. Assigns `@c1`, `@c2`... refs with deterministic `nth-child` CSS selectors. These are elements the ARIA tree misses but users can still click.
-
-### Screenshot modes
-
-The `screenshot` command supports four modes:
-
-| Mode | Syntax | Playwright API |
-|------|--------|----------------|
-| Full page (default) | `screenshot [path]` | `page.screenshot({ fullPage: true })` |
-| Viewport only | `screenshot --viewport [path]` | `page.screenshot({ fullPage: false })` |
-| Element crop | `screenshot "#sel" [path]` or `screenshot @e3 [path]` | `locator.screenshot()` |
-| Region clip | `screenshot --clip x,y,w,h [path]` | `page.screenshot({ clip })` |
-
-Element crop accepts CSS selectors (`.class`, `#id`, `[attr]`) or `@e`/`@c` refs from `snapshot`. Auto-detection: `@e`/`@c` prefix = ref, `.`/`#`/`[` prefix = CSS selector, `--` prefix = flag, everything else = output path.
-
-Mutual exclusion: `--clip` + selector and `--viewport` + `--clip` both throw errors. Unknown flags (e.g. `--bogus`) also throw.
-
-### Authentication
-
-Each server session generates a random UUID as a bearer token. The token is written to the state file (`.gstack/browse.json`) with chmod 600. Every HTTP request must include `Authorization: Bearer <token>`. This prevents other processes on the machine from controlling the browser.
-
-### Console, network, and dialog capture
-
-The server hooks into Playwright's `page.on('console')`, `page.on('response')`, and `page.on('dialog')` events. All entries are kept in O(1) circular buffers (50,000 capacity each) and flushed to disk asynchronously via `Bun.write()`:
-
-- Console: `.gstack/browse-console.log`
-- Network: `.gstack/browse-network.log`
-- Dialog: `.gstack/browse-dialog.log`
-
-The `console`, `network`, and `dialog` commands read from the in-memory buffers, not disk.
-
-### User handoff
-
-When the headless browser can't proceed (CAPTCHA, MFA, complex auth), `handoff` opens a visible Chrome window at the exact same page with all cookies, localStorage, and tabs preserved. The user solves the problem manually, then `resume` returns control to the agent with a fresh snapshot.
+The old in-repo `browse/src` runtime is gone. gstack now drives an external
+[`agent-browser`](https://www.npmjs.com/package/agent-browser) install through a
+session-scoped shell alias:
 
 ```bash
-$B handoff "Stuck on CAPTCHA at login page"   # opens visible Chrome
-# User solves CAPTCHA...
-$B resume                                       # returns to headless with fresh snapshot
+AB="agent-browser --session gstack-$PPID"
 ```
 
-The browser auto-suggests `handoff` after 3 consecutive failures. State is fully preserved across the switch — no re-login needed.
+That means the browser process is still persistent across commands, but gstack no
+longer ships or documents its own compiled browser binary.
 
-### Dialog handling
+## How `/browse` works now
 
-Dialogs (alert, confirm, prompt) are auto-accepted by default to prevent browser lockup. The `dialog-accept` and `dialog-dismiss` commands control this behavior. For prompts, `dialog-accept <text>` provides the response text. All dialogs are logged to the dialog buffer with type, message, and action taken.
+1. `./setup` verifies that `agent-browser` is installed and runnable.
+2. Each skill session creates a unique browser session name: `gstack-$PPID`.
+3. The first `$AB ...` call starts the browser.
+4. Later calls reuse the same session, so cookies, tabs, and localStorage persist.
+5. When the skill needs authenticated pages, `gstack-cookie-import` loads cookies
+   from your local Chromium profile into the active `agent-browser` session.
 
-### JavaScript execution (`js` and `eval`)
+Typical latency is still roughly:
+- first call: ~3s
+- later calls: ~100–200ms
 
-`js` runs a single expression, `eval` runs a JS file. Both support `await` — expressions containing `await` are automatically wrapped in an async context:
+## Core command patterns
+
+gstack documents and relies on these `agent-browser` command families.
+
+### Navigation
+
+| Command | What it does |
+|---|---|
+| `open <url>` | Navigate to a URL. `goto` and `navigate` are aliases. |
+| `back` | Go back in history. |
+| `forward` | Go forward in history. |
+| `reload` | Reload the page. |
+| `get url` | Print the current URL. |
+
+### Reading
+
+| Command | What it does |
+|---|---|
+| `get text body` | Read visible page text. |
+| `get html <sel>` | Return inner HTML for a selector or ref. |
+| `snapshot [-i] [-c] [-d N] [-s sel] [-C]` | Accessibility tree with refs. |
+| `console` | Show console output. |
+| `errors` | Show console warnings/errors only. |
+| `network requests` | Show captured network requests. |
+| `cookies` | Show current cookies. |
+| `storage local` | Show localStorage. |
+
+### Interaction
+
+| Command | What it does |
+|---|---|
+| `click <sel>` | Click an element or `@ref`. |
+| `fill <sel> <text>` | Clear and fill an input. |
+| `type <sel> <text>` | Type without clearing first. |
+| `select <sel> <value>` | Select a dropdown option. |
+| `hover <sel>` | Hover an element. |
+| `press <key>` | Press a key like Enter, Tab, or Escape. |
+| `scroll <dir> [px]` | Scroll up/down/left/right. |
+| `wait <sel\|ms>` | Wait for an element or a duration. |
+| `upload <sel> <file...>` | Upload one or more files. |
+| `dialog accept [text]` | Accept the next dialog. |
+| `dialog dismiss` | Dismiss the next dialog. |
+
+### Inspection & visuals
+
+| Command | What it does |
+|---|---|
+| `eval <js>` | Run JavaScript. Use `eval --stdin` for multiline or `await`. |
+| `get attr <sel> <name>` | Read an attribute. |
+| `get styles <sel>` | Read computed styles. |
+| `is <state> <sel>` | Check `visible`, `enabled`, or `checked`. |
+| `screenshot [path]` | Save a screenshot. |
+| `screenshot --annotate [path]` | Save an annotated screenshot with numbered refs. |
+| `pdf <path>` | Save the page as PDF. |
+| `set viewport <w> <h>` | Set viewport size. |
+| `set device <name>` | Apply a device preset. |
+
+### Tabs & state
+
+| Command | What it does |
+|---|---|
+| `tab` | List tabs. |
+| `tab <n>` | Switch tabs. |
+| `tab new [url]` | Open a new tab. |
+| `tab close [n]` | Close a tab. |
+| `state save <path>` | Save cookies/storage to a file. |
+| `state load <path>` | Load saved browser state. |
+| `close` | Close the browser session. |
+
+## Snapshot workflow
+
+`snapshot` is still the main way the skills understand the page.
+
+Useful flags:
+
+```text
+-i        --interactive            Interactive elements only
+-c        --compact                Compact output
+-d <N>    --depth <N>              Limit tree depth
+-s <sel>  --scope <sel>            Scope to a selector
+-C        --cursor-interactive     Include cursor:pointer / non-ARIA targets
+```
+
+Example:
 
 ```bash
-$B js "await fetch('/api/data').then(r => r.json())"  # works
-$B js "document.title"                                  # also works (no wrapping needed)
-$B eval my-script.js                                    # file with await works too
+$AB snapshot -i -C
+$AB click @e3
+$AB fill @e4 "hello"
 ```
 
-For `eval` files, single-line files return the expression value directly. Multi-line files need explicit `return` when using `await`. Comments containing "await" don't trigger wrapping.
+Refs are invalidated after navigation or major page changes. When in doubt, run
+`snapshot` again.
 
-### Multi-workspace support
+### Diffing page state
 
-Each workspace gets its own isolated browser instance with its own Chromium process, tabs, cookies, and logs. State is stored in `.gstack/` inside the project root (detected via `git rev-parse --show-toplevel`).
+The old built-in snapshot diff mode is gone. Use a shell diff shim instead:
 
-| Workspace | State file | Port |
-|-----------|------------|------|
-| `/code/project-a` | `/code/project-a/.gstack/browse.json` | random (10000-60000) |
-| `/code/project-b` | `/code/project-b/.gstack/browse.json` | random (10000-60000) |
+```bash
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+# ...do the action...
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
+```
 
-No port collisions. No shared state. Each project is fully isolated.
+### Annotated screenshots
 
-### Environment variables
+Use `screenshot --annotate` instead of the old snapshot annotate flow:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BROWSE_PORT` | 0 (random 10000-60000) | Fixed port for the HTTP server (debug override) |
-| `BROWSE_IDLE_TIMEOUT` | 1800000 (30 min) | Idle shutdown timeout in ms |
-| `BROWSE_STATE_FILE` | `.gstack/browse.json` | Path to state file (CLI passes to server) |
-| `BROWSE_SERVER_SCRIPT` | auto-detected | Path to server.ts |
+```bash
+$AB screenshot --annotate /tmp/page.png
+```
 
-### Performance
+## Headed fallback for CAPTCHAs and auth walls
 
-| Tool | First call | Subsequent calls | Context overhead per call |
-|------|-----------|-----------------|--------------------------|
-| Chrome MCP | ~5s | ~2-5s | ~2000 tokens (schema + protocol) |
-| Playwright MCP | ~3s | ~1-3s | ~1500 tokens (schema + protocol) |
-| **gstack browse** | **~3s** | **~100-200ms** | **0 tokens** (plain text stdout) |
+When headless automation gets stuck, switch to a headed browser on the same
+session:
 
-The context overhead difference compounds fast. In a 20-command browser session, MCP tools burn 30,000-40,000 tokens on protocol framing alone. gstack burns zero.
+```bash
+$AB --headed open https://example.com/login
+```
 
-### Why CLI over MCP?
+After the user finishes the CAPTCHA / MFA / auth flow, continue with a fresh
+snapshot:
 
-MCP (Model Context Protocol) works well for remote services, but for local browser automation it adds pure overhead:
+```bash
+$AB snapshot -i
+```
 
-- **Context bloat**: every MCP call includes full JSON schemas and protocol framing. A simple "get the page text" costs 10x more context tokens than it should.
-- **Connection fragility**: persistent WebSocket/stdio connections drop and fail to reconnect.
-- **Unnecessary abstraction**: Claude Code already has a Bash tool. A CLI that prints to stdout is the simplest possible interface.
+If the user already has Chrome running with remote debugging enabled, gstack can
+attach instead:
 
-gstack skips all of this. Compiled binary. Plain text in, plain text out. No protocol. No schema. No connection management.
+```bash
+agent-browser --session gstack-$PPID --auto-connect snapshot -i
+```
 
-## Acknowledgments
+## Cookie import
 
-The browser automation layer is built on [Playwright](https://playwright.dev/) by Microsoft. Playwright's accessibility tree API, locator system, and headless Chromium management are what make ref-based interaction possible. The snapshot system — assigning `@ref` labels to accessibility tree nodes and mapping them back to Playwright Locators — is built entirely on top of Playwright's primitives. Thank you to the Playwright team for building such a solid foundation.
+gstack ships a standalone cookie helper:
+
+- `bin/gstack-cookie-import`
+- `bin/gstack-cookie-import-lib.ts`
+
+It reads Chromium cookies from supported local browsers (Comet, Chrome, Arc,
+Brave, Edge), decrypts them via macOS Keychain access, converts them into
+`agent-browser cookies set ...` commands, and pipes them into the active session.
+
+Typical flow:
+
+```bash
+GCI=~/.claude/skills/gstack/bin/gstack-cookie-import
+$GCI chrome --domain .github.com | while read -r line; do
+  $AB $line
+done
+$AB cookies
+```
+
+In practice, `/setup-browser-cookies` wraps this for you.
 
 ## Development
 
-### Prerequisites
-
-- [Bun](https://bun.sh/) v1.0+
-- Playwright's Chromium (installed automatically by `bun install`)
-
-### Quick start
+### Setup
 
 ```bash
-bun install              # install dependencies + Playwright Chromium
-bun test                 # run integration tests (~3s)
-bun run dev <cmd>        # run CLI from source (no compile)
-bun run build            # compile to browse/dist/browse
+bun install
+./setup
 ```
 
-### Dev mode vs compiled binary
+`./setup` now does the important browser checks:
+- generates skill docs
+- verifies `agent-browser`
+- prepares project-local skill links when relevant
 
-During development, use `bun run dev` instead of the compiled binary. It runs `browse/src/cli.ts` directly with Bun, so you get instant feedback without a compile step:
+### Common commands
 
 ```bash
-bun run dev goto https://example.com
-bun run dev text
-bun run dev snapshot -i
-bun run dev click @e3
+bun run gen:skill-docs
+bun test
+bun test test/cookie-import.test.ts
+bun test test/skill-parser.test.ts test/skill-validation.test.ts test/gen-skill-docs.test.ts
 ```
 
-The compiled binary (`bun run build`) is only needed for distribution. It produces a single ~58MB executable at `browse/dist/browse` using Bun's `--compile` flag.
-
-### Running tests
+### Smoke test the browser integration
 
 ```bash
-bun test                         # run all tests
-bun test browse/test/commands              # run command integration tests only
-bun test browse/test/snapshot              # run snapshot tests only
-bun test browse/test/cookie-import-browser # run cookie import unit tests only
+agent-browser --session gstack-smoke close >/dev/null 2>&1 || true
+agent-browser --session gstack-smoke open https://example.com
+agent-browser --session gstack-smoke snapshot -i
+agent-browser --session gstack-smoke screenshot /tmp/gstack-smoke.png
+agent-browser --session gstack-smoke close
 ```
 
-Tests spin up a local HTTP server (`browse/test/test-server.ts`) serving HTML fixtures from `browse/test/fixtures/`, then exercise the CLI commands against those pages. 203 tests across 3 files, ~15 seconds total.
+## Troubleshooting
 
-### Source map
+### `agent-browser` is missing
 
-| File | Role |
-|------|------|
-| `browse/src/cli.ts` | Entry point. Reads `.gstack/browse.json`, sends HTTP to the server, prints response. |
-| `browse/src/server.ts` | Bun HTTP server. Routes commands to the right handler. Manages idle timeout. |
-| `browse/src/browser-manager.ts` | Chromium lifecycle — launch, tab management, ref map, crash detection. |
-| `browse/src/snapshot.ts` | Parses accessibility tree, assigns `@e`/`@c` refs, builds Locator map. Handles `--diff`, `--annotate`, `-C`. |
-| `browse/src/read-commands.ts` | Non-mutating commands: `text`, `html`, `links`, `js`, `css`, `is`, `dialog`, `forms`, etc. Exports `getCleanText()`. |
-| `browse/src/write-commands.ts` | Mutating commands: `goto`, `click`, `fill`, `upload`, `dialog-accept`, `useragent` (with context recreation), etc. |
-| `browse/src/meta-commands.ts` | Server management, chain routing, diff (DRY via `getCleanText`), snapshot delegation. |
-| `browse/src/cookie-import-browser.ts` | Decrypt Chromium cookies via macOS Keychain + PBKDF2/AES-128-CBC. Auto-detects installed browsers. |
-| `browse/src/cookie-picker-routes.ts` | HTTP routes for `/cookie-picker/*` — browser list, domain search, import, remove. |
-| `browse/src/cookie-picker-ui.ts` | Self-contained HTML generator for the interactive cookie picker (dark theme, no frameworks). |
-| `browse/src/buffers.ts` | `CircularBuffer<T>` (O(1) ring buffer) + console/network/dialog capture with async disk flush. |
+```bash
+npm install -g agent-browser
+agent-browser install
+```
 
-### Deploying to the active skill
+### `/browse` still fails inside gstack
 
-The active skill lives at `~/.claude/skills/gstack/`. After making changes:
+```bash
+cd ~/.claude/skills/gstack
+./setup
+```
 
-1. Push your branch
-2. Pull in the skill directory: `cd ~/.claude/skills/gstack && git pull`
-3. Rebuild: `cd ~/.claude/skills/gstack && bun run build`
+### Cookies are not importing
 
-Or copy the binary directly: `cp browse/dist/browse ~/.claude/skills/gstack/browse/dist/browse`
+Run the focused tests first:
 
-### Adding a new command
+```bash
+bun test test/cookie-import.test.ts
+```
 
-1. Add the handler in `read-commands.ts` (non-mutating) or `write-commands.ts` (mutating)
-2. Register the route in `server.ts`
-3. Add a test case in `browse/test/commands.test.ts` with an HTML fixture if needed
-4. Run `bun test` to verify
-5. Run `bun run build` to compile
+Then verify your local browser/profile names and Keychain access permissions.
+
+## Historical note
+
+Older changelog entries may mention:
+- `$B`
+- `browse/src/*`
+- `browse/dist/browse`
+- `find-browse`
+
+Those refer to the retired in-repo browser runtime. This document reflects the
+current `agent-browser`-based architecture.

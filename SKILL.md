@@ -5,8 +5,7 @@ description: |
   Fast headless browser for QA testing and site dogfooding. Navigate any URL, interact with
   elements, verify page state, diff before/after actions, take annotated screenshots, check
   responsive layouts, test forms and uploads, handle dialogs, and assert element states.
-  ~100ms per command. Use when you need to test a feature, verify a deployment, dogfood a
-  user flow, or file a bug with evidence.
+  Use when you need to test a feature, verify a deployment, dogfood a user flow, or file a bug with evidence.
 
   gstack also includes development workflow skills. When you notice the user is at
   these stages, suggest the appropriate skill:
@@ -128,7 +127,7 @@ If `_CONTRIB` is `true`: you are in **contributor mode**. You're a gstack user w
 
 **At the end of each major workflow step** (not after every single command), reflect on the gstack tooling you used. Rate your experience 0 to 10. If it wasn't a 10, think about why. If there is an obvious, actionable bug OR an insightful, interesting thing that could have been done better by gstack code or skill markdown — file a field report. Maybe our contributor will help make us better!
 
-**Calibration — this is the bar:** For example, `$B js "await fetch(...)"` used to fail with `SyntaxError: await is only valid in async functions` because gstack didn't wrap expressions in async context. Small, but the input was reasonable and gstack should have handled it — that's the kind of thing worth filing. Things less consequential than this, ignore.
+**Calibration — this is the bar:** For example, `$AB eval 'await fetch(...)'` fails with `SyntaxError: await is only valid in async functions` because agent-browser doesn't wrap expressions in async context. Small, but the input was reasonable and gstack should have documented the right `eval --stdin` pattern — that's the kind of thing worth filing. Things less consequential than this, ignore.
 
 **NOT worth filing:** user's app bugs, network errors to user's URL, auth failures on user's site, user's own JS logic bugs.
 
@@ -190,35 +189,48 @@ Only run skills the user explicitly invokes. This preference persists across ses
 
 # gstack browse: QA Testing & Dogfooding
 
-Persistent headless Chromium. First call auto-starts (~3s), then ~100-200ms per command.
-Auto-shuts down after 30 min idle. State persists between calls (cookies, tabs, sessions).
+Persistent browser automation via agent-browser. First call auto-starts a daemon, then later
+commands reuse the same session state (cookies, localStorage, tabs) inside `gstack-$PPID`.
 
 ## SETUP (run this check BEFORE any browse command)
 
 ```bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B=~/.claude/skills/gstack/browse/dist/browse
-if [ -x "$B" ]; then
-  echo "READY: $B"
+if command -v agent-browser >/dev/null 2>&1; then
+  _AB_VER=$(agent-browser --version 2>/dev/null | awk '{print $2}')
+  case "$_AB_VER" in
+    0.15.*|0.16.*|0.17.*|1.*)
+      AB="agent-browser --session gstack-$PPID"
+      GCI=~/.claude/skills/gstack/bin/gstack-cookie-import
+      [ -x "$GCI" ] || GCI=.claude/skills/gstack/bin/gstack-cookie-import
+      $AB close >/dev/null 2>&1 || true
+      echo "READY: $AB"
+      ;;
+    *)
+      echo "NEEDS_UPDATE: $_AB_VER"
+      ;;
+  esac
 else
   echo "NEEDS_SETUP"
 fi
 ```
 
 If `NEEDS_SETUP`:
-1. Tell the user: "gstack browse needs a one-time build (~10 seconds). OK to proceed?" Then STOP and wait.
-2. Run: `cd <SKILL_DIR> && ./setup`
-3. If `bun` is not installed: `curl -fsSL https://bun.sh/install | bash`
+1. Tell the user: "agent-browser needs a one-time install. OK to proceed?" Then STOP and wait.
+2. Run: `npm install -g agent-browser && agent-browser install`
+
+If `NEEDS_UPDATE <version>`:
+1. Tell the user: "gstack expects agent-browser 0.15.x+ but found <version>. OK to update?" Then STOP and wait.
+2. Run: `npm install -g agent-browser@latest && agent-browser install`
+
+When setup succeeds, use `$AB <command>` in subsequent bash blocks.
 
 ## IMPORTANT
 
-- Use the compiled binary via Bash: `$B <command>`
+- Use the session-scoped alias via Bash: `$AB <command>`
 - NEVER use `mcp__claude-in-chrome__*` tools. They are slow and unreliable.
 - Browser persists between calls — cookies, login sessions, and tabs carry over.
-- Dialogs (alert/confirm/prompt) are auto-accepted by default — no browser lockup.
-- **Show screenshots:** After `$B screenshot`, `$B snapshot -a -o`, or `$B responsive`, always use the Read tool on the output PNG(s) so the user can see them. Without this, screenshots are invisible.
+- **Show screenshots:** After `$AB screenshot`, `$AB screenshot --annotate`, or a responsive screenshot sequence, always use the Read tool on the output PNG(s) so the user can see them. Without this, screenshots are invisible.
+- For JavaScript with `await`, use `eval --stdin` with an explicit async wrapper.
 
 ## QA Workflows
 
@@ -226,191 +238,177 @@ If `NEEDS_SETUP`:
 
 ```bash
 # 1. Go to the page
-$B goto https://app.example.com/login
+$AB open https://app.example.com/login
 
 # 2. See what's interactive
-$B snapshot -i
+$AB snapshot -i
 
 # 3. Fill the form using refs
-$B fill @e3 "test@example.com"
-$B fill @e4 "password123"
-$B click @e5
+$AB fill @e3 "test@example.com"
+$AB fill @e4 "password123"
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+$AB click @e5
 
 # 4. Verify it worked
-$B snapshot -D              # diff shows what changed after clicking
-$B is visible ".dashboard"  # assert the dashboard appeared
-$B screenshot /tmp/after-login.png
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+# diff shows what changed after clicking
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
+$AB is visible ".dashboard"  # assert the dashboard appeared
+$AB screenshot /tmp/after-login.png
 ```
 
 ### Verify a deployment / check prod
 
 ```bash
-$B goto https://yourapp.com
-$B text                          # read the page — does it load?
-$B console                       # any JS errors?
-$B network                       # any failed requests?
-$B js "document.title"           # correct title?
-$B is visible ".hero-section"    # key elements present?
-$B screenshot /tmp/prod-check.png
+$AB open https://yourapp.com
+$AB get text body                  # read the page — does it load?
+$AB console                        # any JS errors?
+$AB network requests               # any failed requests?
+$AB eval "document.title"         # correct title?
+$AB is visible ".hero-section"    # key elements present?
+$AB screenshot /tmp/prod-check.png
 ```
 
 ### Dogfood a feature end-to-end
 
 ```bash
 # Navigate to the feature
-$B goto https://app.example.com/new-feature
+$AB open https://app.example.com/new-feature
 
 # Take annotated screenshot — shows every interactive element with labels
-$B snapshot -i -a -o /tmp/feature-annotated.png
+$AB screenshot --annotate /tmp/feature-annotated.png
+$AB snapshot -i
 
-# Find ALL clickable things (including divs with cursor:pointer)
-$B snapshot -C
+# Find ALL clickable things (including cursor-interactive)
+$AB snapshot -i -C
 
 # Walk through the flow
-$B snapshot -i          # baseline
-$B click @e3            # interact
-$B snapshot -D          # what changed? (unified diff)
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+$AB click @e3
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
 
 # Check element states
-$B is visible ".success-toast"
-$B is enabled "#next-step-btn"
-$B is checked "#agree-checkbox"
+$AB is visible ".success-toast"
+$AB is enabled "#next-step-btn"
+$AB is checked "#agree-checkbox"
 
 # Check console for errors after interactions
-$B console
+$AB console
 ```
 
 ### Test responsive layouts
 
 ```bash
-# Quick: 3 screenshots at mobile/tablet/desktop
-$B goto https://yourapp.com
-$B responsive /tmp/layout
+$AB open https://yourapp.com
 
-# Manual: specific viewport
-$B viewport 375x812     # iPhone
-$B screenshot /tmp/mobile.png
-$B viewport 1440x900    # Desktop
-$B screenshot /tmp/desktop.png
+# Mobile / tablet / desktop screenshots
+$AB set viewport 375 812
+$AB screenshot /tmp/layout-mobile.png
+$AB set viewport 768 1024
+$AB screenshot /tmp/layout-tablet.png
+$AB set viewport 1440 900
+$AB screenshot /tmp/layout-desktop.png
 
 # Element screenshot (crop to specific element)
-$B screenshot "#hero-banner" /tmp/hero.png
-$B snapshot -i
-$B screenshot @e3 /tmp/button.png
-
-# Region crop
-$B screenshot --clip 0,0,800,600 /tmp/above-fold.png
-
-# Viewport only (no scroll)
-$B screenshot --viewport /tmp/viewport.png
+$AB screenshot "#hero-banner" /tmp/hero.png
+$AB snapshot -i
+$AB screenshot @e3 /tmp/button.png
 ```
 
 ### Test file upload
 
 ```bash
-$B goto https://app.example.com/upload
-$B snapshot -i
-$B upload @e3 /path/to/test-file.pdf
-$B is visible ".upload-success"
-$B screenshot /tmp/upload-result.png
+$AB open https://app.example.com/upload
+$AB snapshot -i
+$AB upload @e3 /path/to/test-file.pdf
+$AB is visible ".upload-success"
+$AB screenshot /tmp/upload-result.png
 ```
 
 ### Test forms with validation
 
 ```bash
-$B goto https://app.example.com/form
-$B snapshot -i
+$AB open https://app.example.com/form
+$AB snapshot -i
 
 # Submit empty — check validation errors appear
-$B click @e10                        # submit button
-$B snapshot -D                       # diff shows error messages appeared
-$B is visible ".error-message"
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+$AB click @e10
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
+$AB is visible ".error-message"
 
 # Fill and resubmit
-$B fill @e3 "valid input"
-$B click @e10
-$B snapshot -D                       # diff shows errors gone, success state
+$AB fill @e3 "valid input"
+$AB snapshot -i > .gstack/snap-$PPID-before-success.txt
+$AB click @e10
+$AB snapshot -i > .gstack/snap-$PPID-after-success.txt
+diff -u .gstack/snap-$PPID-before-success.txt .gstack/snap-$PPID-after-success.txt || true
 ```
 
 ### Test dialogs (delete confirmations, prompts)
 
 ```bash
 # Set up dialog handling BEFORE triggering
-$B dialog-accept              # will auto-accept next alert/confirm
-$B click "#delete-button"     # triggers confirmation dialog
-$B dialog                     # see what dialog appeared
-$B snapshot -D                # verify the item was deleted
+$AB dialog accept
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+$AB click "#delete-button"
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
 
 # For prompts that need input
-$B dialog-accept "my answer"  # accept with text
-$B click "#rename-button"     # triggers prompt
+$AB dialog accept "my answer"
+$AB click "#rename-button"
 ```
 
 ### Test authenticated pages (import real browser cookies)
 
 ```bash
-# Import cookies from your real browser (opens interactive picker)
-$B cookie-import-browser
-
-# Or import a specific domain directly
-$B cookie-import-browser comet --domain .github.com
+# Import cookies from your real browser into the active session
+$GCI comet --domain .github.com | while read -r line; do
+  $AB $line
+done
 
 # Now test authenticated pages
-$B goto https://github.com/settings/profile
-$B snapshot -i
-$B screenshot /tmp/github-profile.png
+$AB open https://github.com/settings/profile
+$AB snapshot -i
+$AB screenshot /tmp/github-profile.png
 ```
 
 ### Compare two pages / environments
 
 ```bash
-$B diff https://staging.app.com https://prod.app.com
-```
-
-### Multi-step chain (efficient for long flows)
-
-```bash
-echo '[
-  ["goto","https://app.example.com"],
-  ["snapshot","-i"],
-  ["fill","@e3","test@test.com"],
-  ["fill","@e4","password"],
-  ["click","@e5"],
-  ["snapshot","-D"],
-  ["screenshot","/tmp/result.png"]
-]' | $B chain
+$AB open https://staging.app.com
+$AB get text body > /tmp/staging.txt
+$AB open https://prod.app.com
+$AB get text body > /tmp/prod.txt
+diff -u /tmp/staging.txt /tmp/prod.txt || true
 ```
 
 ## Quick Assertion Patterns
 
 ```bash
 # Element exists and is visible
-$B is visible ".modal"
+$AB is visible ".modal"
 
-# Button is enabled/disabled
-$B is enabled "#submit-btn"
-$B is disabled "#submit-btn"
+# Button is enabled
+$AB is enabled "#submit-btn"
 
 # Checkbox state
-$B is checked "#agree"
-
-# Input is editable
-$B is editable "#name-field"
-
-# Element has focus
-$B is focused "#search-input"
+$AB is checked "#agree"
 
 # Page contains text
-$B js "document.body.textContent.includes('Success')"
+$AB eval "document.body.textContent.includes('Success')"
 
 # Element count
-$B js "document.querySelectorAll('.list-item').length"
+$AB eval "document.querySelectorAll('.list-item').length"
 
 # Specific attribute value
-$B attrs "#logo"    # returns all attributes as JSON
+$AB get attr "#logo" src
 
-# CSS property
-$B css ".button" "background-color"
+# CSS properties
+$AB get styles ".button"
 ```
 
 ## Snapshot System
@@ -418,136 +416,114 @@ $B css ".button" "background-color"
 The snapshot is your primary tool for understanding and interacting with pages.
 
 ```
--i        --interactive           Interactive elements only (buttons, links, inputs) with @e refs
--c        --compact               Compact (no empty structural nodes)
--d <N>    --depth                 Limit tree depth (0 = root only, default: unlimited)
--s <sel>  --selector              Scope to CSS selector
--D        --diff                  Unified diff against previous snapshot (first call stores baseline)
--a        --annotate              Annotated screenshot with red overlay boxes and ref labels
--o <path> --output                Output path for annotated screenshot (default: /tmp/browse-annotated.png)
--C        --cursor-interactive    Cursor-interactive elements (@c refs — divs with pointer, onclick)
+-i        --interactive            Interactive elements only (recommended for QA flows)
+-c        --compact                Compact output
+-d <N>    --depth <N>              Limit tree depth
+-s <sel>  --scope <sel>            Scope snapshot to a selector
+-C        --cursor-interactive     Include cursor-interactive elements
 ```
 
-All flags can be combined freely. `-o` only applies when `-a` is also used.
-Example: `$B snapshot -i -a -C -o /tmp/annotated.png`
+All flags can be combined freely. Example: `$AB snapshot -i -c -C`
 
-**Ref numbering:** @e refs are assigned sequentially (@e1, @e2, ...) in tree order.
-@c refs from `-C` are numbered separately (@c1, @c2, ...).
-
-After snapshot, use @refs as selectors in any command:
+**Ref numbering:** refs appear as `[ref=e1]`, `[ref=e2]`, and so on in tree order.
+After snapshot, use `@e1`, `@e2`, ... in later commands:
 ```bash
-$B click @e3       $B fill @e4 "value"     $B hover @e1
-$B html @e2        $B css @e5 "color"      $B attrs @e6
-$B click @c1       # cursor-interactive ref (from -C)
+$AB click @e3       $AB fill @e4 "value"     $AB hover @e1
+$AB get html @e2    $AB get styles @e5         $AB get attr @e6 href
 ```
 
-**Output format:** indented accessibility tree with @ref IDs, one element per line.
+**Output format:** one element per line, role first, then name, then ref.
 ```
-  @e1 [heading] "Welcome" [level=1]
-  @e2 [textbox] "Email"
-  @e3 [button] "Submit"
+- heading "Welcome" [ref=e1] [level=1]
+- textbox "Email" [ref=e2]
+- button "Submit" [ref=e3]
 ```
 
-Refs are invalidated on navigation — run `snapshot` again after `goto`.
+Refs are invalidated on navigation — run `snapshot` again after `open` or after a page-changing click.
+
+**No built-in diff mode:** replace old `snapshot -D` flows with a shell diff shim:
+```bash
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+# ... do the action ...
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
+```
+
+**Annotated screenshots:** use `screenshot --annotate /tmp/path.png` instead of the old snapshot annotate flag.
 
 ## Command Reference
 
 ### Navigation
 | Command | Description |
 |---------|-------------|
-| `back` | History back |
-| `forward` | History forward |
-| `goto <url>` | Navigate to URL |
-| `reload` | Reload page |
-| `url` | Print current URL |
+| `open <url>` | Navigate to a URL. `goto` and `navigate` are aliases. |
+| `back` | History back. |
+| `forward` | History forward. |
+| `reload` | Reload the current page. |
+| `get url` | Print the current URL. |
 
 ### Reading
 | Command | Description |
 |---------|-------------|
-| `accessibility` | Full ARIA tree |
-| `forms` | Form fields as JSON |
-| `html [selector]` | innerHTML of selector (throws if not found), or full page HTML if no selector given |
-| `links` | All links as "text → href" |
-| `text` | Cleaned page text |
+| `get text body` | Read visible page text from the body. |
+| `get html <sel>` | Return innerHTML for a selector or ref. |
+| `snapshot [-i] [-c] [-d N] [-s sel] [-C]` | Accessibility tree with refs for agent-friendly interaction. |
+| `console` | Show console output. |
+| `errors` | Show console errors/warnings only. |
+| `network requests` | Show captured network requests. |
+| `cookies` | Show current cookies. |
+| `storage local` | Show localStorage. |
 
 ### Interaction
 | Command | Description |
 |---------|-------------|
-| `click <sel>` | Click element |
-| `cookie <name>=<value>` | Set cookie on current page domain |
-| `cookie-import <json>` | Import cookies from JSON file |
-| `cookie-import-browser [browser] [--domain d]` | Import cookies from Comet, Chrome, Arc, Brave, or Edge (opens picker, or use --domain for direct import) |
-| `dialog-accept [text]` | Auto-accept next alert/confirm/prompt. Optional text is sent as the prompt response |
-| `dialog-dismiss` | Auto-dismiss next dialog |
-| `fill <sel> <val>` | Fill input |
-| `header <name>:<value>` | Set custom request header (colon-separated, sensitive values auto-redacted) |
-| `hover <sel>` | Hover element |
-| `press <key>` | Press key — Enter, Tab, Escape, ArrowUp/Down/Left/Right, Backspace, Delete, Home, End, PageUp, PageDown, or modifiers like Shift+Enter |
-| `scroll [sel]` | Scroll element into view, or scroll to page bottom if no selector |
-| `select <sel> <val>` | Select dropdown option by value, label, or visible text |
-| `type <text>` | Type into focused element |
-| `upload <sel> <file> [file2...]` | Upload file(s) |
-| `useragent <string>` | Set user agent |
-| `viewport <WxH>` | Set viewport size |
-| `wait <sel|--networkidle|--load>` | Wait for element, network idle, or page load (timeout: 15s) |
+| `click <sel>` | Click an element or `@ref`. |
+| `fill <sel> <text>` | Clear and fill an input. |
+| `type <sel> <text>` | Type without clearing first. |
+| `select <sel> <value>` | Select a dropdown option. |
+| `hover <sel>` | Hover an element. |
+| `press <key>` | Press a key such as Enter, Tab, or Escape. |
+| `scroll <dir> [px]` | Scroll up/down/left/right. |
+| `wait <sel|ms>` | Wait for an element or a duration. Use `wait --load networkidle` for slow pages. |
+| `upload <sel> <file...>` | Upload one or more files. |
+| `dialog accept [text]` | Accept the next dialog, optionally with prompt text. |
+| `dialog dismiss` | Dismiss the next dialog. |
 
 ### Inspection
 | Command | Description |
 |---------|-------------|
-| `attrs <sel|@ref>` | Element attributes as JSON |
-| `console [--clear|--errors]` | Console messages (--errors filters to error/warning) |
-| `cookies` | All cookies as JSON |
-| `css <sel> <prop>` | Computed CSS value |
-| `dialog [--clear]` | Dialog messages |
-| `eval <file>` | Run JavaScript from file and return result as string (path must be under /tmp or cwd) |
-| `is <prop> <sel>` | State check (visible/hidden/enabled/disabled/checked/editable/focused) |
-| `js <expr>` | Run JavaScript expression and return result as string |
-| `network [--clear]` | Network requests |
-| `perf` | Page load timings |
-| `storage [set k v]` | Read all localStorage + sessionStorage as JSON, or set <key> <value> to write localStorage |
+| `eval <js>` | Run JavaScript. For `await`, multiline scripts, or nested quotes, use `eval --stdin`. |
+| `get attr <sel> <name>` | Read a single attribute. |
+| `get styles <sel>` | Show computed styles for an element. |
+| `is <state> <sel>` | Check `visible`, `enabled`, or `checked`. |
 
 ### Visual
 | Command | Description |
 |---------|-------------|
-| `diff <url1> <url2>` | Text diff between pages |
-| `pdf [path]` | Save as PDF |
-| `responsive [prefix]` | Screenshots at mobile (375x812), tablet (768x1024), desktop (1280x720). Saves as {prefix}-mobile.png etc. |
-| `screenshot [--viewport] [--clip x,y,w,h] [selector|@ref] [path]` | Save screenshot (supports element crop via CSS/@ref, --clip region, --viewport) |
+| `screenshot [path]` | Save a screenshot. |
+| `screenshot --annotate [path]` | Save a screenshot with numbered ref labels. |
+| `pdf <path>` | Save the page as PDF. |
+| `set viewport <w> <h>` | Set viewport size. |
+| `set device <name>` | Apply a built-in device preset. |
 
-### Snapshot
+### Tabs & Sessions
 | Command | Description |
 |---------|-------------|
-| `snapshot [flags]` | Accessibility tree with @e refs for element selection. Flags: -i interactive only, -c compact, -d N depth limit, -s sel scope, -D diff vs previous, -a annotated screenshot, -o path output, -C cursor-interactive @c refs |
-
-### Meta
-| Command | Description |
-|---------|-------------|
-| `chain` | Run commands from JSON stdin. Format: [["cmd","arg1",...],...] |
-
-### Tabs
-| Command | Description |
-|---------|-------------|
-| `closetab [id]` | Close tab |
-| `newtab [url]` | Open new tab |
-| `tab <id>` | Switch to tab |
-| `tabs` | List open tabs |
-
-### Server
-| Command | Description |
-|---------|-------------|
-| `handoff [message]` | Open visible Chrome at current page for user takeover |
-| `restart` | Restart server |
-| `resume` | Re-snapshot after user takeover, return control to AI |
-| `status` | Health check |
-| `stop` | Shutdown server |
+| `tab` | List tabs. |
+| `tab <n>` | Switch to a tab by index. |
+| `tab new [url]` | Open a new tab. |
+| `tab close [n]` | Close the current tab or a specific tab. |
+| `state save <path>` | Save cookies/storage to a file. |
+| `state load <path>` | Load saved browser state before reopening the browser. |
+| `close` | Close the browser session. |
 
 ## Tips
 
-1. **Navigate once, query many times.** `goto` loads the page; then `text`, `js`, `screenshot` all hit the loaded page instantly.
+1. **Navigate once, query many times.** `open` loads the page; then `get text body`, `eval`, and `screenshot` all reuse the loaded page instantly.
 2. **Use `snapshot -i` first.** See all interactive elements, then click/fill by ref. No CSS selector guessing.
-3. **Use `snapshot -D` to verify.** Baseline → action → diff. See exactly what changed.
+3. **Use before/after diffs to verify.** Snapshot → action → diff. See exactly what changed.
 4. **Use `is` for assertions.** `is visible .modal` is faster and more reliable than parsing page text.
-5. **Use `snapshot -a` for evidence.** Annotated screenshots are great for bug reports.
-6. **Use `snapshot -C` for tricky UIs.** Finds clickable divs that the accessibility tree misses.
-7. **Check `console` after actions.** Catch JS errors that don't surface visually.
-8. **Use `chain` for long flows.** Single command, no per-step CLI overhead.
+5. **Use `screenshot --annotate` for evidence.** Annotated screenshots are great for bug reports.
+6. **Use `snapshot -i -C` for tricky UIs.** Finds clickable divs that the accessibility tree misses.
+7. **Check `console` or `errors` after actions.** Catch JS failures that don't surface visually.
+8. **Use `eval --stdin` for async JavaScript.** `await` needs an explicit async wrapper → use a heredoc.

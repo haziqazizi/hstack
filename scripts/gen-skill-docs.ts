@@ -9,8 +9,6 @@
  * Used by skill:check and CI freshness checks.
  */
 
-import { COMMAND_DESCRIPTIONS } from '../browse/src/commands';
-import { SNAPSHOT_FLAGS } from '../browse/src/snapshot';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -27,78 +25,113 @@ interface TemplateContext {
 // ─── Placeholder Resolvers ──────────────────────────────────
 
 function generateCommandReference(_ctx: TemplateContext): string {
-  // Group commands by category
-  const groups = new Map<string, Array<{ command: string; description: string; usage?: string }>>();
-  for (const [cmd, meta] of Object.entries(COMMAND_DESCRIPTIONS)) {
-    const list = groups.get(meta.category) || [];
-    list.push({ command: cmd, description: meta.description, usage: meta.usage });
-    groups.set(meta.category, list);
-  }
-
-  // Category display order
-  const categoryOrder = [
-    'Navigation', 'Reading', 'Interaction', 'Inspection',
-    'Visual', 'Snapshot', 'Meta', 'Tabs', 'Server',
-  ];
-
-  const sections: string[] = [];
-  for (const category of categoryOrder) {
-    const commands = groups.get(category);
-    if (!commands || commands.length === 0) continue;
-
-    // Sort alphabetically within category
-    commands.sort((a, b) => a.command.localeCompare(b.command));
-
-    sections.push(`### ${category}`);
-    sections.push('| Command | Description |');
-    sections.push('|---------|-------------|');
-    for (const cmd of commands) {
-      const display = cmd.usage ? `\`${cmd.usage}\`` : `\`${cmd.command}\``;
-      sections.push(`| ${display} | ${cmd.description} |`);
-    }
-    sections.push('');
-  }
-
-  return sections.join('\n').trimEnd();
+  return [
+    '### Navigation',
+    '| Command | Description |',
+    '|---------|-------------|',
+    '| `open <url>` | Navigate to a URL. `goto` and `navigate` are aliases. |',
+    '| `back` | History back. |',
+    '| `forward` | History forward. |',
+    '| `reload` | Reload the current page. |',
+    '| `get url` | Print the current URL. |',
+    '',
+    '### Reading',
+    '| Command | Description |',
+    '|---------|-------------|',
+    '| `get text body` | Read visible page text from the body. |',
+    '| `get html <sel>` | Return innerHTML for a selector or ref. |',
+    '| `snapshot [-i] [-c] [-d N] [-s sel] [-C]` | Accessibility tree with refs for agent-friendly interaction. |',
+    '| `console` | Show console output. |',
+    '| `errors` | Show console errors/warnings only. |',
+    '| `network requests` | Show captured network requests. |',
+    '| `cookies` | Show current cookies. |',
+    '| `storage local` | Show localStorage. |',
+    '',
+    '### Interaction',
+    '| Command | Description |',
+    '|---------|-------------|',
+    '| `click <sel>` | Click an element or `@ref`. |',
+    '| `fill <sel> <text>` | Clear and fill an input. |',
+    '| `type <sel> <text>` | Type without clearing first. |',
+    '| `select <sel> <value>` | Select a dropdown option. |',
+    '| `hover <sel>` | Hover an element. |',
+    '| `press <key>` | Press a key such as Enter, Tab, or Escape. |',
+    '| `scroll <dir> [px]` | Scroll up/down/left/right. |',
+    '| `wait <sel\|ms>` | Wait for an element or a duration. Use `wait --load networkidle` for slow pages. |',
+    '| `upload <sel> <file...>` | Upload one or more files. |',
+    '| `dialog accept [text]` | Accept the next dialog, optionally with prompt text. |',
+    '| `dialog dismiss` | Dismiss the next dialog. |',
+    '',
+    '### Inspection',
+    '| Command | Description |',
+    '|---------|-------------|',
+    '| `eval <js>` | Run JavaScript. For `await`, multiline scripts, or nested quotes, use `eval --stdin`. |',
+    '| `get attr <sel> <name>` | Read a single attribute. |',
+    '| `get styles <sel>` | Show computed styles for an element. |',
+    '| `is <state> <sel>` | Check `visible`, `enabled`, or `checked`. |',
+    '',
+    '### Visual',
+    '| Command | Description |',
+    '|---------|-------------|',
+    '| `screenshot [path]` | Save a screenshot. |',
+    '| `screenshot --annotate [path]` | Save a screenshot with numbered ref labels. |',
+    '| `pdf <path>` | Save the page as PDF. |',
+    '| `set viewport <w> <h>` | Set viewport size. |',
+    '| `set device <name>` | Apply a built-in device preset. |',
+    '',
+    '### Tabs & Sessions',
+    '| Command | Description |',
+    '|---------|-------------|',
+    '| `tab` | List tabs. |',
+    '| `tab <n>` | Switch to a tab by index. |',
+    '| `tab new [url]` | Open a new tab. |',
+    '| `tab close [n]` | Close the current tab or a specific tab. |',
+    '| `state save <path>` | Save cookies/storage to a file. |',
+    '| `state load <path>` | Load saved browser state before reopening the browser. |',
+    '| `close` | Close the browser session. |',
+  ].join('\n');
 }
 
 function generateSnapshotFlags(_ctx: TemplateContext): string {
-  const lines: string[] = [
+  return [
     'The snapshot is your primary tool for understanding and interacting with pages.',
     '',
     '```',
-  ];
-
-  for (const flag of SNAPSHOT_FLAGS) {
-    const label = flag.valueHint ? `${flag.short} ${flag.valueHint}` : flag.short;
-    lines.push(`${label.padEnd(10)}${flag.long.padEnd(24)}${flag.description}`);
-  }
-
-  lines.push('```');
-  lines.push('');
-  lines.push('All flags can be combined freely. `-o` only applies when `-a` is also used.');
-  lines.push('Example: `$B snapshot -i -a -C -o /tmp/annotated.png`');
-  lines.push('');
-  lines.push('**Ref numbering:** @e refs are assigned sequentially (@e1, @e2, ...) in tree order.');
-  lines.push('@c refs from `-C` are numbered separately (@c1, @c2, ...).');
-  lines.push('');
-  lines.push('After snapshot, use @refs as selectors in any command:');
-  lines.push('```bash');
-  lines.push('$B click @e3       $B fill @e4 "value"     $B hover @e1');
-  lines.push('$B html @e2        $B css @e5 "color"      $B attrs @e6');
-  lines.push('$B click @c1       # cursor-interactive ref (from -C)');
-  lines.push('```');
-  lines.push('');
-  lines.push('**Output format:** indented accessibility tree with @ref IDs, one element per line.');
-  lines.push('```');
-  lines.push('  @e1 [heading] "Welcome" [level=1]');
-  lines.push('  @e2 [textbox] "Email"');
-  lines.push('  @e3 [button] "Submit"');
-  lines.push('```');
-  lines.push('');
-  lines.push('Refs are invalidated on navigation — run `snapshot` again after `goto`.');
-
-  return lines.join('\n');
+    '-i        --interactive            Interactive elements only (recommended for QA flows)',
+    '-c        --compact                Compact output',
+    '-d <N>    --depth <N>              Limit tree depth',
+    '-s <sel>  --scope <sel>            Scope snapshot to a selector',
+    '-C        --cursor-interactive     Include cursor-interactive elements',
+    '```',
+    '',
+    'All flags can be combined freely. Example: `$AB snapshot -i -c -C`',
+    '',
+    '**Ref numbering:** refs appear as `[ref=e1]`, `[ref=e2]`, and so on in tree order.',
+    'After snapshot, use `@e1`, `@e2`, ... in later commands:',
+    '```bash',
+    '$AB click @e3       $AB fill @e4 "value"     $AB hover @e1',
+    '$AB get html @e2    $AB get styles @e5         $AB get attr @e6 href',
+    '```',
+    '',
+    '**Output format:** one element per line, role first, then name, then ref.',
+    '```',
+    '- heading "Welcome" [ref=e1] [level=1]',
+    '- textbox "Email" [ref=e2]',
+    '- button "Submit" [ref=e3]',
+    '```',
+    '',
+    'Refs are invalidated on navigation — run `snapshot` again after `open` or after a page-changing click.',
+    '',
+    '**No built-in diff mode:** replace old `snapshot -D` flows with a shell diff shim:',
+    '```bash',
+    '$AB snapshot -i > .gstack/snap-$PPID-before.txt',
+    '# ... do the action ...',
+    '$AB snapshot -i > .gstack/snap-$PPID-after.txt',
+    'diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true',
+    '```',
+    '',
+    '**Annotated screenshots:** use `screenshot --annotate /tmp/path.png` instead of the old snapshot annotate flag.',
+  ].join('\n');
 }
 
 function generatePreamble(ctx: TemplateContext): string {
@@ -182,7 +215,7 @@ If \`_CONTRIB\` is \`true\`: you are in **contributor mode**. You're a gstack us
 
 **At the end of each major workflow step** (not after every single command), reflect on the gstack tooling you used. Rate your experience 0 to 10. If it wasn't a 10, think about why. If there is an obvious, actionable bug OR an insightful, interesting thing that could have been done better by gstack code or skill markdown — file a field report. Maybe our contributor will help make us better!
 
-**Calibration — this is the bar:** For example, \`$B js "await fetch(...)"\` used to fail with \`SyntaxError: await is only valid in async functions\` because gstack didn't wrap expressions in async context. Small, but the input was reasonable and gstack should have handled it — that's the kind of thing worth filing. Things less consequential than this, ignore.
+**Calibration — this is the bar:** For example, \`$AB eval 'await fetch(...)'\` fails with \`SyntaxError: await is only valid in async functions\` because agent-browser doesn't wrap expressions in async context. Small, but the input was reasonable and gstack should have documented the right \`eval --stdin\` pattern — that's the kind of thing worth filing. Things less consequential than this, ignore.
 
 **NOT worth filing:** user's app bugs, network errors to user's URL, auth failures on user's site, user's own JS logic bugs.
 
@@ -243,21 +276,38 @@ function generateBrowseSetup(_ctx: TemplateContext): string {
   return `## SETUP (run this check BEFORE any browse command)
 
 \`\`\`bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B=~/.claude/skills/gstack/browse/dist/browse
-if [ -x "$B" ]; then
-  echo "READY: $B"
+if command -v agent-browser >/dev/null 2>&1; then
+  _AB_VER=$(agent-browser --version 2>/dev/null | awk '{print $2}')
+  case "$_AB_VER" in
+    0.15.*|0.16.*|0.17.*|1.*)
+      AB="agent-browser --session gstack-$PPID"
+      GCI=~/.claude/skills/gstack/bin/gstack-cookie-import
+      [ -x "$GCI" ] || GCI=.claude/skills/gstack/bin/gstack-cookie-import
+      $AB close >/dev/null 2>&1 || true
+      echo "READY: $AB"
+      ;;
+    *)
+      echo "NEEDS_UPDATE: $_AB_VER"
+      ;;
+  esac
 else
   echo "NEEDS_SETUP"
 fi
 \`\`\`
 
 If \`NEEDS_SETUP\`:
-1. Tell the user: "gstack browse needs a one-time build (~10 seconds). OK to proceed?" Then STOP and wait.
-2. Run: \`cd <SKILL_DIR> && ./setup\`
-3. If \`bun\` is not installed: \`curl -fsSL https://bun.sh/install | bash\``;
+1. Tell the user: "agent-browser needs a one-time install. OK to proceed?" Then STOP and wait.
+2. Run: \`npm install -g agent-browser && agent-browser install\`
+
+If \`NEEDS_UPDATE <version>\`:
+1. Tell the user: "gstack expects agent-browser 0.15.x+ but found <version>. OK to update?" Then STOP and wait.
+2. Run: \`npm install -g agent-browser@latest && agent-browser install\`
+
+When setup succeeds, use \`$AB <command>\` in subsequent bash blocks.`;
+}
+
+function generateWebSearchGuidance(_ctx: TemplateContext): string {
+  return '';
 }
 
 function generateBaseBranchDetect(_ctx: TemplateContext): string {
@@ -299,16 +349,16 @@ This is the **primary mode** for developers verifying their work. When the user 
    - View/template/component files → which pages render them
    - Model/service files → which pages use those models (check controllers that reference them)
    - CSS/style files → which pages include those stylesheets
-   - API endpoints → test them directly with \`$B js "await fetch('/api/...')"\`
+   - API endpoints → test them directly with \`$AB eval --stdin <<'EVALEOF'\n(async () => { const r = await fetch('/api/...'); return { status: r.status, body: await r.text() }; })()\nEVALEOF\`
    - Static pages (markdown, HTML) → navigate to them directly
 
    **If no obvious pages/routes are identified from the diff:** Do not skip browser testing. The user invoked /qa because they want browser-based verification. Fall back to Quick mode — navigate to the homepage, follow the top 5 navigation targets, check console for errors, and test any interactive elements found. Backend, config, and infrastructure changes affect app behavior — always verify the app still works.
 
 3. **Detect the running app** — check common local dev ports:
    \`\`\`bash
-   $B goto http://localhost:3000 2>/dev/null && echo "Found app on :3000" || \\
-   $B goto http://localhost:4000 2>/dev/null && echo "Found app on :4000" || \\
-   $B goto http://localhost:8080 2>/dev/null && echo "Found app on :8080"
+   $AB open http://localhost:3000 2>/dev/null && echo "Found app on :3000" || \\
+   $AB open http://localhost:4000 2>/dev/null && echo "Found app on :4000" || \\
+   $AB open http://localhost:8080 2>/dev/null && echo "Found app on :8080"
    \`\`\`
    If no local app is found, check for a staging/preview URL in the PR or environment. If nothing works, ask the user for the URL.
 
@@ -317,7 +367,7 @@ This is the **primary mode** for developers verifying their work. When the user 
    - Take a screenshot
    - Check console for errors
    - If the change was interactive (forms, buttons, flows), test the interaction end-to-end
-   - Use \`snapshot -D\` before and after actions to verify the change had the expected effect
+   - Use a before/after snapshot diff shim to verify the change had the expected effect
 
 5. **Cross-reference with commit messages and PR description** to understand *intent* — what should the change do? Verify it actually does that.
 
@@ -345,7 +395,7 @@ Run full mode, then load \`baseline.json\` from a previous run. Diff: which issu
 
 ### Phase 1: Initialize
 
-1. Find browse binary (see Setup above)
+1. Find agent-browser (see Setup above)
 2. Create output directories
 3. Copy report template from \`qa/templates/qa-report-template.md\` to output dir
 4. Start timer for duration tracking
@@ -355,19 +405,25 @@ Run full mode, then load \`baseline.json\` from a previous run. Diff: which issu
 **If the user specified auth credentials:**
 
 \`\`\`bash
-$B goto <login-url>
-$B snapshot -i                    # find the login form
-$B fill @e3 "user@example.com"
-$B fill @e4 "[REDACTED]"         # NEVER include real passwords in report
-$B click @e5                      # submit
-$B snapshot -D                    # verify login succeeded
+$AB open <login-url>
+$AB snapshot -i                   # find the login form
+$AB fill @e3 "user@example.com"
+$AB fill @e4 "[REDACTED]"        # NEVER include real passwords in report
+$AB click @e5                     # submit
+$AB snapshot -i > .gstack/snap-$PPID-after-login.txt
+\`\`\`
+
+If you need a diff, save a baseline snapshot before clicking and run:
+\`\`\`bash
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after-login.txt || true
 \`\`\`
 
 **If the user provided a cookie file:**
 
 \`\`\`bash
-$B cookie-import cookies.json
-$B goto <target-url>
+$AB close
+$AB state load cookies.json
+$AB open <target-url>
 \`\`\`
 
 **If 2FA/OTP is required:** Ask the user for the code and wait.
@@ -378,7 +434,7 @@ $B goto <target-url>
 
 Before browsing deeply, explicitly decide **who you are testing as**, **which states matter**, and **which flows belong to each persona/state combination**. Build a lightweight matrix using, in priority order:
 
-1. The project-scoped test plan artifact from `/plan-eng-review`
+1. The project-scoped test plan artifact from \`/plan-eng-review\`
 2. User-provided auth/cookie instructions
 3. The branch diff and affected routes
 4. UI clues (login, admin, billing, onboarding, settings, etc.)
@@ -396,10 +452,13 @@ Write the matrix into the report as you go. If a critical persona or state canno
 Get a map of the application:
 
 \`\`\`bash
-$B goto <target-url>
-$B snapshot -i -a -o "$REPORT_DIR/screenshots/initial.png"
-$B links                          # map navigation structure
-$B console --errors               # any errors on landing?
+$AB open <target-url>
+$AB screenshot --annotate "$REPORT_DIR/screenshots/initial.png"
+$AB snapshot -i
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify(Array.from(document.querySelectorAll('a')).map(a => ({ text: (a.textContent || '').trim(), href: a.href })))
+EVALEOF
+$AB errors
 \`\`\`
 
 **Detect framework** (note in report metadata):
@@ -415,9 +474,10 @@ $B console --errors               # any errors on landing?
 Visit pages systematically. At each page:
 
 \`\`\`bash
-$B goto <page-url>
-$B snapshot -i -a -o "$REPORT_DIR/screenshots/page-name.png"
-$B console --errors
+$AB open <page-url>
+$AB screenshot --annotate "$REPORT_DIR/screenshots/page-name.png"
+$AB snapshot -i
+$AB errors
 \`\`\`
 
 Then follow the **per-page exploration checklist** (see \`qa/references/issue-taxonomy.md\`):
@@ -430,9 +490,9 @@ Then follow the **per-page exploration checklist** (see \`qa/references/issue-ta
 6. **Console** — Any new JS errors after interactions?
 7. **Responsiveness** — Check mobile viewport if relevant:
    \`\`\`bash
-   $B viewport 375x812
-   $B screenshot "$REPORT_DIR/screenshots/page-mobile.png"
-   $B viewport 1280x720
+   $AB set viewport 375 812
+   $AB screenshot "$REPORT_DIR/screenshots/page-mobile.png"
+   $AB set viewport 1280 720
    \`\`\`
 
 **Depth judgment:** Spend more time on core features (homepage, dashboard, checkout, search) and less on secondary pages (about, terms, privacy).
@@ -449,14 +509,16 @@ Document each issue **immediately when found** — don't batch them.
 1. Take a screenshot before the action
 2. Perform the action
 3. Take a screenshot showing the result
-4. Use \`snapshot -D\` to show what changed
+4. Use a before/after snapshot diff shim to show what changed
 5. Write repro steps referencing screenshots
 
 \`\`\`bash
-$B screenshot "$REPORT_DIR/screenshots/issue-001-step-1.png"
-$B click @e5
-$B screenshot "$REPORT_DIR/screenshots/issue-001-result.png"
-$B snapshot -D
+$AB screenshot "$REPORT_DIR/screenshots/issue-001-step-1.png"
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+$AB click @e5
+$AB screenshot "$REPORT_DIR/screenshots/issue-001-result.png"
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
 \`\`\`
 
 **Static bugs** (typos, layout issues, missing images):
@@ -464,7 +526,8 @@ $B snapshot -D
 2. Describe what's wrong
 
 \`\`\`bash
-$B snapshot -i -a -o "$REPORT_DIR/screenshots/issue-002.png"
+$AB screenshot --annotate "$REPORT_DIR/screenshots/issue-002.png"
+$AB snapshot -i
 \`\`\`
 
 **Write each issue to the report immediately** using the template format from \`qa/templates/qa-report-template.md\`.
@@ -575,7 +638,7 @@ Minimum 0 per category.
 8. **Depth over breadth.** 5-10 well-documented issues with evidence > 20 vague descriptions.
 9. **Never delete output files.** Screenshots and reports accumulate — that's intentional.
 10. **Use \`snapshot -C\` for tricky UIs.** Finds clickable divs that the accessibility tree misses.
-11. **Show screenshots to the user.** After every \`$B screenshot\`, \`$B snapshot -a -o\`, or \`$B responsive\` command, use the Read tool on the output file(s) so the user can see them inline. For \`responsive\` (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.
+11. **Show screenshots to the user.** After every \`$AB screenshot\`, \`$AB screenshot --annotate\`, or manual responsive screenshot sequence, use the Read tool on the output PNG(s) so the user can see them inline. For responsive checks (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.
 12. **Never refuse to use the browser.** When the user invokes /qa or /qa-report, they are requesting browser-based testing. Never suggest evals, unit tests, or other alternatives as a substitute. Even if the diff appears to have no UI changes, backend changes affect app behavior — always open the browser and test.`;
 }
 
@@ -645,7 +708,7 @@ Run full audit, then load previous \`design-baseline.json\`. Compare: per-catego
 The most uniquely designer-like output. Form a gut reaction before analyzing anything.
 
 1. Navigate to the target URL
-2. Take a full-page desktop screenshot: \`$B screenshot "$REPORT_DIR/screenshots/first-impression.png"\`
+2. Take a full-page desktop screenshot: \`$AB screenshot "$REPORT_DIR/screenshots/first-impression.png"\`
 3. Write the **First Impression** using this structured critique format:
    - "The site communicates **[what]**." (what it says at a glance — competence? playfulness? confusion?)
    - "I notice **[observation]**." (what stands out, positive or negative — be specific)
@@ -662,19 +725,27 @@ Extract the actual design system the site uses (not what a DESIGN.md says, but w
 
 \`\`\`bash
 # Fonts in use (capped at 500 elements to avoid timeout)
-$B js "JSON.stringify([...new Set([...document.querySelectorAll('*')].slice(0,500).map(e => getComputedStyle(e).fontFamily))])"
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify([...new Set([...document.querySelectorAll('*')].slice(0,500).map(e => getComputedStyle(e).fontFamily))])
+EVALEOF
 
 # Color palette in use
-$B js "JSON.stringify([...new Set([...document.querySelectorAll('*')].slice(0,500).flatMap(e => [getComputedStyle(e).color, getComputedStyle(e).backgroundColor]).filter(c => c !== 'rgba(0, 0, 0, 0)'))])"
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify([...new Set([...document.querySelectorAll('*')].slice(0,500).flatMap(e => [getComputedStyle(e).color, getComputedStyle(e).backgroundColor]).filter(c => c !== 'rgba(0, 0, 0, 0)'))])
+EVALEOF
 
 # Heading hierarchy
-$B js "JSON.stringify([...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map(h => ({tag:h.tagName, text:h.textContent.trim().slice(0,50), size:getComputedStyle(h).fontSize, weight:getComputedStyle(h).fontWeight})))"
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify([...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map(h => ({tag:h.tagName, text:h.textContent.trim().slice(0,50), size:getComputedStyle(h).fontSize, weight:getComputedStyle(h).fontWeight})))
+EVALEOF
 
 # Touch target audit (find undersized interactive elements)
-$B js "JSON.stringify([...document.querySelectorAll('a,button,input,[role=button]')].filter(e => {const r=e.getBoundingClientRect(); return r.width>0 && (r.width<44||r.height<44)}).map(e => ({tag:e.tagName, text:(e.textContent||'').trim().slice(0,30), w:Math.round(e.getBoundingClientRect().width), h:Math.round(e.getBoundingClientRect().height)})).slice(0,20))"
+$AB eval --stdin <<'EVALEOF'
+JSON.stringify([...document.querySelectorAll('a,button,input,[role=button]')].filter(e => {const r=e.getBoundingClientRect(); return r.width>0 && (r.width<44||r.height<44)}).map(e => ({tag:e.tagName, text:(e.textContent||'').trim().slice(0,30), w:Math.round(e.getBoundingClientRect().width), h:Math.round(e.getBoundingClientRect().height)})).slice(0,20))
+EVALEOF
 
 # Performance baseline
-$B perf
+$AB eval 'JSON.stringify(performance.timing)'
 \`\`\`
 
 Structure findings as an **Inferred Design System**:
@@ -692,18 +763,21 @@ After extraction, offer: *"Want me to save this as your DESIGN.md? I can lock in
 For each page in scope:
 
 \`\`\`bash
-$B goto <url>
-$B snapshot -i -a -o "$REPORT_DIR/screenshots/{page}-annotated.png"
-$B responsive "$REPORT_DIR/screenshots/{page}"
-$B console --errors
-$B perf
+$AB open <url>
+$AB screenshot --annotate "$REPORT_DIR/screenshots/{page}-annotated.png"
+$AB snapshot -i
+$AB set viewport 375 812 && $AB screenshot "$REPORT_DIR/screenshots/{page}-mobile.png"
+$AB set viewport 768 1024 && $AB screenshot "$REPORT_DIR/screenshots/{page}-tablet.png"
+$AB set viewport 1280 720 && $AB screenshot "$REPORT_DIR/screenshots/{page}-desktop.png"
+$AB errors
+$AB eval 'JSON.stringify(performance.timing)'
 \`\`\`
 
 ### Auth Detection
 
 After the first navigation, check if the URL changed to a login-like path:
 \`\`\`bash
-$B url
+$AB get url
 \`\`\`
 If URL contains \`/login\`, \`/signin\`, \`/auth\`, or \`/sso\`: the site requires authentication. AskUserQuestion: "This site requires authentication. Want to import cookies from your browser? Run \`/setup-browser-cookies\` first if needed."
 
@@ -730,7 +804,7 @@ Apply these at each page. Each finding gets an impact rating (high/medium/polish
 - Weight contrast: >=2 weights used for hierarchy
 - No blacklisted fonts (Papyrus, Comic Sans, Lobster, Impact, Jokerman)
 - If primary font is Inter/Roboto/Open Sans/Poppins → flag as potentially generic
-- \`text-wrap: balance\` or \`text-pretty\` on headings (check via \`$B css <heading> text-wrap\`)
+- \`text-wrap: balance\` or \`text-pretty\` on headings (check via \`$AB get styles <heading>\`)
 - Curly quotes used, not straight quotes
 - Ellipsis character (\`…\`) not three dots (\`...\`)
 - \`font-variant-numeric: tabular-nums\` on number columns
@@ -790,7 +864,7 @@ Apply these at each page. Each finding gets an impact rating (high/medium/polish
 - Easing: ease-out for entering, ease-in for exiting, ease-in-out for moving
 - Duration: 50-700ms range (nothing slower unless page transition)
 - Purpose: every animation communicates something (state change, attention, spatial relationship)
-- \`prefers-reduced-motion\` respected (check: \`$B js "matchMedia('(prefers-reduced-motion: reduce)').matches"\`)
+- \`prefers-reduced-motion\` respected (check: \`$AB eval "matchMedia('(prefers-reduced-motion: reduce)').matches"\`)
 - No \`transition: all\` — properties listed explicitly
 - Only \`transform\` and \`opacity\` animated (not layout properties like width, height, top, left)
 
@@ -834,9 +908,10 @@ The test: would a human designer at a respected studio ever ship this?
 Walk 2-3 key user flows and evaluate the *feel*, not just the function:
 
 \`\`\`bash
-$B snapshot -i
-$B click @e3           # perform action
-$B snapshot -D          # diff to see what changed
+$AB snapshot -i > .gstack/snap-$PPID-before.txt
+$AB click @e3           # perform action
+$AB snapshot -i > .gstack/snap-$PPID-after.txt
+diff -u .gstack/snap-$PPID-before.txt .gstack/snap-$PPID-after.txt || true
 \`\`\`
 
 Evaluate:
@@ -946,7 +1021,7 @@ Tie everything to user goals and product objectives. Always suggest specific imp
 8. **Responsive is design, not just "not broken."** A stacked desktop layout on mobile is not responsive design — it's lazy. Evaluate whether the mobile layout makes *design* sense.
 9. **Document incrementally.** Write each finding to the report as you find it. Don't batch.
 10. **Depth over breadth.** 5-10 well-documented findings with screenshots and specific suggestions > 20 vague observations.
-11. **Show screenshots to the user.** After every \`$B screenshot\`, \`$B snapshot -a -o\`, or \`$B responsive\` command, use the Read tool on the output file(s) so the user can see them inline. For \`responsive\` (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.`;
+11. **Show screenshots to the user.** After every \`$AB screenshot\`, \`$AB screenshot --annotate\`, or responsive screenshot sequence, use the Read tool on the output file(s) so the user can see them inline. For responsive checks (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.`;
 }
 
 function generateReviewDashboard(_ctx: TemplateContext): string {
@@ -1154,6 +1229,7 @@ const RESOLVERS: Record<string, (ctx: TemplateContext) => string> = {
   SNAPSHOT_FLAGS: generateSnapshotFlags,
   PREAMBLE: generatePreamble,
   BROWSE_SETUP: generateBrowseSetup,
+  WEB_SEARCH_GUIDANCE: generateWebSearchGuidance,
   BASE_BRANCH_DETECT: generateBaseBranchDetect,
   QA_METHODOLOGY: generateQAMethodology,
   DESIGN_METHODOLOGY: generateDesignMethodology,

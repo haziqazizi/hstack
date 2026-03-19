@@ -1,8 +1,7 @@
 /**
  * SKILL.md parser and validator.
  *
- * Extracts $B commands from code blocks, validates them against
- * the command registry and snapshot flags.
+ * Extracts browser alias commands from code blocks.
  *
  * Used by:
  *   - test/skill-validation.test.ts (Tier 1 static tests)
@@ -10,8 +9,6 @@
  *   - scripts/dev-skill.ts (watch mode)
  */
 
-import { ALL_COMMANDS } from '../../browse/src/commands';
-import { parseSnapshotArgs } from '../../browse/src/snapshot';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -30,7 +27,7 @@ export interface ValidationResult {
 }
 
 /**
- * Extract all $B invocations from bash code blocks in a SKILL.md file.
+ * Extract all `$AB` / `$B` invocations from bash code blocks in a SKILL.md file.
  */
 export function extractBrowseCommands(skillPath: string): BrowseCommand[] {
   const content = fs.readFileSync(skillPath, 'utf-8');
@@ -55,9 +52,9 @@ export function extractBrowseCommands(skillPath: string): BrowseCommand[] {
 
     if (!inBashBlock) continue;
 
-    // Match lines with $B command invocations
-    // Handle multiple $B commands on one line (e.g., "$B click @e3       $B fill @e4 "value"")
-    const matches = line.matchAll(/\$B\s+(\S+)(?:\s+([^\$]*))?/g);
+    // Match lines with browser alias command invocations.
+    // Handle multiple commands on one line (e.g., "$AB click @e3  $AB fill @e4 \"value\"")
+    const matches = line.matchAll(/\$(?:AB|B)\s+(\S+)(?:\s+([^\$]*))?/g);
     for (const match of matches) {
       const command = match[1];
       let argsStr = (match[2] || '').trim();
@@ -95,7 +92,11 @@ export function extractBrowseCommands(skillPath: string): BrowseCommand[] {
 }
 
 /**
- * Extract and validate all $B commands in a SKILL.md file.
+ * Extract browser alias commands in a SKILL.md file.
+ *
+ * We intentionally do not validate command names or flags against agent-browser.
+ * It is an external dependency, similar to `git` or `gh`, and its command surface
+ * is documented in generated markdown rather than imported from local source files.
  */
 export function validateSkill(skillPath: string): ValidationResult {
   const commands = extractBrowseCommands(skillPath);
@@ -107,28 +108,11 @@ export function validateSkill(skillPath: string): ValidationResult {
   };
 
   if (commands.length === 0) {
-    result.warnings.push('no $B commands found');
+    result.warnings.push('no browser alias commands found');
     return result;
   }
 
-  for (const cmd of commands) {
-    if (!ALL_COMMANDS.has(cmd.command)) {
-      result.invalid.push(cmd);
-      continue;
-    }
-
-    // Validate snapshot flags
-    if (cmd.command === 'snapshot' && cmd.args.length > 0) {
-      try {
-        parseSnapshotArgs(cmd.args);
-      } catch (err: any) {
-        result.snapshotFlagErrors.push({ command: cmd, error: err.message });
-        continue;
-      }
-    }
-
-    result.valid.push(cmd);
-  }
+  result.valid.push(...commands);
 
   return result;
 }

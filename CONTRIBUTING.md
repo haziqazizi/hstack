@@ -45,7 +45,7 @@ the issue, fix it, and open a PR.
    ```bash
    # In your core project (the one where gstack annoyed you)
    ln -sfn /path/to/your/gstack-fork .claude/skills/gstack
-   cd .claude/skills/gstack && bun install && bun run build
+   cd .claude/skills/gstack && bun install && ./setup
    ```
 5. **Fix the issue** — your changes are live immediately in this project
 6. **Test by actually using gstack** — do the thing that annoyed you, verify it's fixed
@@ -73,12 +73,16 @@ gstack/                          <- your working tree
 │   ├── ship -> gstack/ship
 │   └── ...                      <- one symlink per skill
 ├── review/
-│   └── SKILL.md                 <- edit this, test with /review
+│   ├── SKILL.md.tmpl            <- edit templates, not generated docs
+│   └── SKILL.md
 ├── ship/
+│   ├── SKILL.md.tmpl
 │   └── SKILL.md
 ├── browse/
-│   ├── src/                     <- TypeScript source
-│   └── dist/                    <- compiled binary (gitignored)
+│   ├── SKILL.md.tmpl
+│   └── SKILL.md
+├── bin/
+│   └── gstack-cookie-import     <- standalone browser-cookie helper
 └── ...
 ```
 
@@ -88,14 +92,14 @@ gstack/                          <- your working tree
 # 1. Enter dev mode
 bin/dev-setup
 
-# 2. Edit a skill
-vim review/SKILL.md
+# 2. Edit a skill template
+vim review/SKILL.md.tmpl
 
-# 3. Test it in Claude Code — changes are live
+# 3. Regenerate generated docs
+bun run gen:skill-docs
+
+# 4. Test it in Claude Code — changes are live
 #    > /review
-
-# 4. Editing browse source? Rebuild the binary
-bun run build
 
 # 5. Done for the day? Tear down
 bin/dev-teardown
@@ -135,7 +139,7 @@ bun run test:evals           # Tier 2 + 3 combined (~$4/run)
 
 Runs automatically with `bun test`. No API keys needed.
 
-- **Skill parser tests** (`test/skill-parser.test.ts`) — Extracts every `$B` command from SKILL.md bash code blocks and validates against the command registry in `browse/src/commands.ts`. Catches typos, removed commands, and invalid snapshot flags.
+- **Skill parser tests** (`test/skill-parser.test.ts`) — Extracts every `$AB` browser-alias command from SKILL.md bash code blocks (while still accepting legacy `$B` examples in fixtures). This catches malformed browser snippets in generated docs without depending on an in-repo command registry.
 - **Skill validation tests** (`test/skill-validation.test.ts`) — Validates that SKILL.md files reference only real commands and flags, and that command descriptions meet quality thresholds.
 - **Generator tests** (`test/gen-skill-docs.test.ts`) — Tests the template system: verifies placeholders resolve correctly, output includes value hints for flags (e.g. `-d <N>` not just `-d`), enriched descriptions for key commands (e.g. `is` lists valid states, `press` lists key examples).
 
@@ -203,7 +207,7 @@ Each dimension is scored 1-5. Threshold: every dimension must score **≥ 4**. T
 
 A GitHub Action (`.github/workflows/skill-docs.yml`) runs `bun run gen:skill-docs --dry-run` on every push and PR. If the generated SKILL.md files differ from what's committed, CI fails. This catches stale docs before they merge.
 
-Tests run against the browse binary directly — they don't require dev mode.
+Tests validate generated docs, helper binaries, and the session-runner scaffolding directly. They do not depend on a vendored `browse/src` runtime.
 
 ## Editing SKILL.md files
 
@@ -225,7 +229,7 @@ bun run dev:skill
 
 For template authoring best practices (natural language over bash-isms, dynamic branch detection, `{{BASE_BRANCH_DETECT}}` usage), see CLAUDE.md's "Writing SKILL templates" section.
 
-To add a browse command, add it to `browse/src/commands.ts`. To add a snapshot flag, add it to `SNAPSHOT_FLAGS` in `browse/src/snapshot.ts`. Then rebuild.
+To document a new `agent-browser` command or snapshot flag in gstack, update the static command reference / snapshot docs in `scripts/gen-skill-docs.ts`, regenerate with `bun run gen:skill-docs`, and update any parser or validation tests that assert on the generated output.
 
 ## Conductor workspaces
 
@@ -244,7 +248,7 @@ When Conductor creates a new workspace, `bin/dev-setup` runs automatically. It d
 
 - **SKILL.md files are generated.** Edit the `.tmpl` template, not the `.md`. Run `bun run gen:skill-docs` to regenerate.
 - **TODOS.md is the unified backlog.** Organized by skill/component with P0-P4 priorities. `/ship` auto-detects completed items. All planning/review/retro skills read it for context.
-- **Browse source changes need a rebuild.** If you touch `browse/src/*.ts`, run `bun run build`.
+- **Template or generator changes need regeneration.** If you touch `*.tmpl` files or `scripts/gen-skill-docs.ts`, run `bun run gen:skill-docs` (or `./setup`).
 - **Dev mode shadows your global install.** Project-local skills take priority over `~/.claude/skills/gstack`. `bin/dev-teardown` restores the global one.
 - **Conductor workspaces are independent.** Each workspace is its own git worktree. `bin/dev-setup` runs automatically via `conductor.json`.
 - **`.env` propagates across worktrees.** Set it once in the main repo, all Conductor workspaces get it.
@@ -259,7 +263,7 @@ do real work:
 ```bash
 # In your core project
 ln -sfn /path/to/your/gstack-checkout .claude/skills/gstack
-cd .claude/skills/gstack && bun install && bun run build
+cd .claude/skills/gstack && bun install && ./setup
 ```
 
 Now every gstack skill invocation in this project uses your working tree. Edit a
@@ -282,10 +286,10 @@ If you don't want per-project symlinks, you can switch the global install:
 cd ~/.claude/skills/gstack
 git fetch origin
 git checkout origin/<branch>
-bun install && bun run build
+bun install && ./setup
 ```
 
-This affects all projects. To revert: `git checkout main && git pull && bun run build`.
+This affects all projects. To revert: `git checkout main && git pull && ./setup`.
 
 ## Shipping your changes
 
