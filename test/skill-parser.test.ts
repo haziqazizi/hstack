@@ -131,36 +131,35 @@ describe('validateSkill', () => {
     expect(result.snapshotFlagErrors).toHaveLength(0);
   });
 
-  test('invalid commands flagged in result', () => {
-    const p = writeFixture('invalid.md', [
+  test('treats extracted browser alias commands as valid external CLI usage', () => {
+    const p = writeFixture('unknown-ok.md', [
       '```bash',
       '$B goto https://example.com',
       '$B explode',
-      '$B halp',
+      '$AB halp',
       '```',
     ].join('\n'));
     const result = validateSkill(p);
-    expect(result.valid).toHaveLength(1);
-    expect(result.invalid).toHaveLength(2);
-    expect(result.invalid[0].command).toBe('explode');
-    expect(result.invalid[1].command).toBe('halp');
+    expect(result.valid).toHaveLength(3);
+    expect(result.invalid).toHaveLength(0);
+    expect(result.snapshotFlagErrors).toHaveLength(0);
   });
 
-  test('snapshot flags validated via parseSnapshotArgs', () => {
+  test('does not attempt to validate snapshot flags for external CLI usage', () => {
     const p = writeFixture('bad-snapshot.md', [
       '```bash',
       '$B snapshot --bogus',
       '```',
     ].join('\n'));
     const result = validateSkill(p);
-    expect(result.snapshotFlagErrors).toHaveLength(1);
-    expect(result.snapshotFlagErrors[0].error).toContain('Unknown snapshot flag');
+    expect(result.valid).toHaveLength(1);
+    expect(result.snapshotFlagErrors).toHaveLength(0);
   });
 
-  test('returns warning when no $B commands found', () => {
+  test('returns warning when no browser alias commands found', () => {
     const p = writeFixture('empty.md', '# Nothing here\n');
     const result = validateSkill(p);
-    expect(result.warnings).toContain('no $B commands found');
+    expect(result.warnings).toContain('no browser alias commands found');
   });
 
   test('valid snapshot flags pass', () => {

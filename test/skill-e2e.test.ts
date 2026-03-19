@@ -4,7 +4,7 @@ import type { SkillTestResult } from './helpers/session-runner';
 import { outcomeJudge, callJudge } from './helpers/llm-judge';
 import { EvalCollector, judgePassed } from './helpers/eval-store';
 import type { EvalTestEntry } from './helpers/eval-store';
-import { startTestServer } from '../browse/test/test-server';
+import { startTestServer } from './helpers/test-server';
 import { selectTests, detectBaseBranch, getChangedFiles, E2E_TOUCHFILES, GLOBAL_TOUCHFILES } from './helpers/touchfiles';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
