@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# gstack-read-url — fetch and read a URL via Exa API
+# Usage: gstack-read-url "https://example.com" [--max-chars N]
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+GSTACK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+exec bun run "$GSTACK_DIR/scripts/exa-search.ts" read "$@"
