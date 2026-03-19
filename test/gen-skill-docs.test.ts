@@ -93,7 +93,8 @@ describe('gen-skill-docs', () => {
 
   test('generated setup block defines session-scoped alias', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('AB="agent-browser --session gstack-$PPID"');
+    expect(content).toContain('AB="$HOME/.gstack/bin/agent-browser-session-$PPID"');
+    expect(content).toContain('exec agent-browser --session-name "gstack-$PPID"');
     expect(content).toContain('NEEDS_SETUP');
   });
 });

@@ -282,11 +282,25 @@ if command -v agent-browser >/dev/null 2>&1; then
   _AB_VER=$(agent-browser --version 2>/dev/null | awk '{print $2}')
   case "$_AB_VER" in
     0.15.*|0.16.*|0.17.*|1.*)
-      AB="agent-browser --session gstack-$PPID"
-      GCI=~/.claude/skills/gstack/bin/gstack-cookie-import
-      [ -x "$GCI" ] || GCI=.claude/skills/gstack/bin/gstack-cookie-import
-      $AB close >/dev/null 2>&1 || true
+      AB_DIR="$HOME/.gstack/bin"
+      mkdir -p "$AB_DIR"
+      AB="$AB_DIR/agent-browser-session-$PPID"
+      cat > "$AB" <<EOF
+#!/bin/sh
+exec agent-browser --session-name "gstack-$PPID" "\$@"
+EOF
+      chmod +x "$AB"
+      _GCI=~/.claude/skills/gstack/bin/gstack-cookie-import
+      [ -x "$_GCI" ] || _GCI=.claude/skills/gstack/bin/gstack-cookie-import
+      GCI="$AB_DIR/gstack-cookie-import"
+      cat > "$GCI" <<EOF
+#!/bin/sh
+exec "$_GCI" "\$@"
+EOF
+      chmod +x "$GCI"
+      "$AB" close >/dev/null 2>&1 || true
       echo "READY: $AB"
+      echo "COOKIE_IMPORT: $GCI"
       ;;
     *)
       echo "NEEDS_UPDATE: $_AB_VER"
@@ -305,7 +319,14 @@ If \`NEEDS_UPDATE <version>\`:
 1. Tell the user: "gstack expects agent-browser 0.15.x+ but found <version>. OK to update?" Then STOP and wait.
 2. Run: \`npm install -g agent-browser@latest && agent-browser install\`
 
-When setup succeeds, use \`$AB <command>\` in subsequent bash blocks.`;
+When setup succeeds, re-establish the helper paths at the top of each later bash block:
+
+\`\`\`bash
+AB="$HOME/.gstack/bin/agent-browser-session-$PPID"
+GCI="$HOME/.gstack/bin/gstack-cookie-import"
+\`\`\`
+
+Then use \`$AB <command>\` and \`$GCI ...\`.`;
 }
 
 function generateWebSearchGuidance(_ctx: TemplateContext): string {

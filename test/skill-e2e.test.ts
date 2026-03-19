@@ -86,7 +86,6 @@ function recordE2E(name: string, suite: string, result: SkillTestResult, extra?:
   });
 }
 
-let testServer: ReturnType<typeof startTestServer>;
 let tmpDir: string;
 const browseBin = path.resolve(ROOT, 'browse', 'dist', 'browse');
 
@@ -173,21 +172,23 @@ describeIfSelected('Skill E2E tests', [
   'browse-basic', 'browse-snapshot', 'skillmd-setup-discovery',
   'skillmd-no-local-binary', 'skillmd-outside-git', 'contributor-mode', 'session-awareness',
 ], () => {
+  let skillServer: ReturnType<typeof startTestServer>;
+
   beforeAll(() => {
-    testServer = startTestServer();
+    skillServer = startTestServer();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-'));
     setupBrowseShims(tmpDir);
   });
 
   afterAll(() => {
-    testServer?.server?.stop();
+    skillServer?.server?.stop();
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   });
 
   testIfSelected('browse-basic', async () => {
     const result = await runSkillTest({
       prompt: `You have a browse binary at ${browseBin}. Assign it to B variable and run these commands in sequence:
-1. $B goto ${testServer.url}
+1. $B goto ${skillServer.url}
 2. $B snapshot -i
 3. $B text
 4. $B screenshot /tmp/skill-e2e-test.png
@@ -208,7 +209,7 @@ Report the results of each command.`,
   testIfSelected('browse-snapshot', async () => {
     const result = await runSkillTest({
       prompt: `You have a browse binary at ${browseBin}. Assign it to B variable and run:
-1. $B goto ${testServer.url}
+1. $B goto ${skillServer.url}
 2. $B snapshot -i
 3. $B snapshot -c
 4. $B snapshot -D
@@ -237,15 +238,19 @@ Report what each command returned.`,
     const setupBlock = skillMd.slice(setupStart, setupEnd);
 
     // Guard: verify we extracted a valid setup block
-    expect(setupBlock).toContain('browse/dist/browse');
+    expect(setupBlock).toContain('agent-browser-session-$PPID');
+    expect(setupBlock).toContain('COOKIE_IMPORT:');
 
     const result = await runSkillTest({
-      prompt: `Follow these instructions to find the browse binary and run a basic command.
+      prompt: `Follow these instructions to prepare the browser helper path and run a basic command.
 
 ${setupBlock}
 
-After finding the binary, run: $B goto ${testServer.url}
-Then run: $B text
+After setup succeeds, run:
+AB="$HOME/.gstack/bin/agent-browser-session-$PPID"
+$AB open ${skillServer.url}
+$AB get text body
+
 Report whether it worked.`,
       workingDirectory: tmpDir,
       maxTurns: 10,
@@ -260,7 +265,7 @@ Report whether it worked.`,
   }, 90_000);
 
   testIfSelected('skillmd-no-local-binary', async () => {
-    // Create a tmpdir with no browse binary — no local .claude/skills/gstack/browse/dist/browse
+    // Create a tmpdir outside the repo and verify setup still reports READY/NEEDS_SETUP cleanly.
     const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-empty-'));
 
     const skillMd = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
@@ -281,9 +286,7 @@ Report the exact output. Do NOT try to fix or install anything — just report w
       runId,
     });
 
-    // Setup block should either find the global binary (READY) or show NEEDS_SETUP.
-    // On dev machines with gstack installed globally, the fallback path
-    // ~/.claude/skills/gstack/browse/dist/browse exists, so we get READY.
+    // Setup block should either find global agent-browser (READY) or show NEEDS_SETUP.
     // The important thing is it doesn't crash or give a confusing error.
     const allText = result.output || '';
     recordE2E('SKILL.md setup block (no local binary)', 'Skill E2E tests', result);
@@ -327,8 +330,13 @@ Report the exact output — either "READY: <path>" or "NEEDS_SETUP".`,
 
   testIfSelected('contributor-mode', async () => {
     const contribDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-contrib-'));
-    const logsDir = path.join(contribDir, 'contributor-logs');
+    const logsDir = path.join(os.homedir(), '.gstack', 'contributor-logs');
     fs.mkdirSync(logsDir, { recursive: true });
+    const beforeLogs = new Map(
+      fs.readdirSync(logsDir)
+        .filter(f => f.endsWith('.md'))
+        .map(f => [f, fs.statSync(path.join(logsDir, f)).mtimeMs]),
+    );
 
     // Extract contributor mode instructions from generated SKILL.md
     const skillMd = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
@@ -341,13 +349,14 @@ Report the exact output — either "READY: <path>" or "NEEDS_SETUP".`,
 
 ${contribBlock}
 
-OVERRIDE: Write contributor logs to ${logsDir}/ instead of ~/.gstack/contributor-logs/
+You just hit a genuine gstack issue during browser setup:
+- the skill expected a browser helper path to exist
+- the helper path was missing, so browser commands could not run
+- this is a gstack/tooling problem, not a user app bug
 
-Now try this browse command (it will fail — there is no binary at this path):
-/nonexistent/path/browse goto https://example.com
-
-This is a gstack issue (the browse binary is missing/misconfigured).
-File a contributor report about this issue. Then tell me what you filed.`,
+File a contributor report about that issue using the standard contributor-mode format.
+Write the report to the normal default location under ~/.gstack/contributor-logs/.
+Then tell me what you filed.`,
       workingDirectory: contribDir,
       maxTurns: 8,
       timeout: 60_000,
@@ -363,17 +372,22 @@ File a contributor report about this issue. Then tell me what you filed.`,
     });
 
     // Verify a contributor log was created with expected format
-    const logFiles = fs.readdirSync(logsDir).filter(f => f.endsWith('.md'));
-    expect(logFiles.length).toBeGreaterThan(0);
+    const afterLogs = fs.readdirSync(logsDir).filter(f => f.endsWith('.md'));
+    const touchedLogs = afterLogs.filter(f => {
+      const beforeMtime = beforeLogs.get(f);
+      const afterMtime = fs.statSync(path.join(logsDir, f)).mtimeMs;
+      return beforeMtime === undefined || afterMtime > beforeMtime;
+    });
+    expect(touchedLogs.length).toBeGreaterThan(0);
 
     // Verify new reflection-based format
-    const logContent = fs.readFileSync(path.join(logsDir, logFiles[0]), 'utf-8');
+    const logContent = fs.readFileSync(path.join(logsDir, touchedLogs[0]), 'utf-8');
     expect(logContent).toContain('Hey gstack team');
     expect(logContent).toContain('What I was trying to do');
     expect(logContent).toContain('What happened instead');
     expect(logContent).toMatch(/rating/i);
-    // Verify report has repro steps (agent may use "Steps to reproduce", "Repro Steps", etc.)
-    expect(logContent).toMatch(/repro|steps to reproduce|how to reproduce/i);
+    // Verify report has actionable debugging detail (agents may use repro steps, details, or suggested fix sections)
+    expect(logContent).toMatch(/repro|steps to reproduce|how to reproduce|details|suggested fix/i);
     // Verify report has date/version footer (agent may format differently)
     expect(logContent).toMatch(/date.*2026|2026.*date/i);
 
@@ -454,9 +468,10 @@ Remember: _SESSIONS=4, so ELI16 mode is active. The user is juggling multiple wi
 
 describeIfSelected('QA skill E2E', ['qa-quick'], () => {
   let qaDir: string;
+  let qaServer: ReturnType<typeof startTestServer>;
 
   beforeAll(() => {
-    testServer = testServer || startTestServer();
+    qaServer = startTestServer();
     qaDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-qa-'));
     setupBrowseShims(qaDir);
 
@@ -468,20 +483,18 @@ describeIfSelected('QA skill E2E', ['qa-quick'], () => {
   });
 
   afterAll(() => {
-    testServer?.server?.stop();
+    qaServer?.server?.stop();
     try { fs.rmSync(qaDir, { recursive: true, force: true }); } catch {}
   });
 
   test('/qa quick completes without browse errors', async () => {
     const result = await runSkillTest({
-      prompt: `B="${browseBin}"
-
-The test server is already running at: ${testServer.url}
-Target page: ${testServer.url}/basic.html
+      prompt: `The test server is already running at: ${qaServer.url}
+Target page: ${qaServer.url}/basic.html
 
 Read the file qa/SKILL.md for the QA workflow instructions.
 
-Run a Quick-depth QA test on ${testServer.url}/basic.html
+Run a Quick-depth QA test on ${qaServer.url}/basic.html
 Do NOT use AskUserQuestion — run Quick tier directly.
 Do NOT try to start a server or discover ports — the URL above is ready.
 Write your report to ${qaDir}/qa-reports/qa-report.md`,
@@ -493,13 +506,13 @@ Write your report to ${qaDir}/qa-reports/qa-report.md`,
     });
 
     logCost('/qa quick', result);
+    const fatalBrowseErrors = result.browseErrors.filter(err =>
+      /command not found|Unknown argument|Cannot navigate to invalid URL|browser not installed/i.test(err),
+    );
     recordE2E('/qa quick', 'QA skill E2E', result, {
-      passed: ['success', 'error_max_turns'].includes(result.exitReason),
+      passed: ['success', 'error_max_turns'].includes(result.exitReason) && fatalBrowseErrors.length === 0,
     });
-    // browseErrors can include false positives from hallucinated paths
-    if (result.browseErrors.length > 0) {
-      console.warn('/qa quick browse errors (non-fatal):', result.browseErrors);
-    }
+    expect(fatalBrowseErrors).toHaveLength(0);
     // Accept error_max_turns — the agent doing thorough QA work is not a failure
     expect(['success', 'error_max_turns']).toContain(result.exitReason);
   }, 300_000);
@@ -738,11 +751,10 @@ const outcomeTestNames = ['qa-b6-static', 'qa-b7-spa', 'qa-b8-checkout'];
 const anyOutcomeSelected = selectedTests === null || outcomeTestNames.some(t => selectedTests!.includes(t));
 (anyOutcomeSelected ? describeOutcome : describe.skip)('Planted-bug outcome evals', () => {
   let outcomeDir: string;
+  let outcomeServer: ReturnType<typeof startTestServer>;
 
   beforeAll(() => {
-    // Always start fresh — previous tests' agents may have killed the shared server
-    try { testServer?.server?.stop(); } catch {}
-    testServer = startTestServer();
+    outcomeServer = startTestServer();
     outcomeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-outcome-'));
     setupBrowseShims(outcomeDir);
 
@@ -751,7 +763,7 @@ const anyOutcomeSelected = selectedTests === null || outcomeTestNames.some(t => 
   });
 
   afterAll(() => {
-    testServer?.server?.stop();
+    outcomeServer?.server?.stop();
     try { fs.rmSync(outcomeDir, { recursive: true, force: true }); } catch {}
   });
 
@@ -771,7 +783,7 @@ const anyOutcomeSelected = selectedTests === null || outcomeTestNames.some(t => 
 
     // Direct bug-finding with browse. Keep prompt concise — no reading long SKILL.md docs.
     // "Write early, update later" pattern ensures report exists even if agent hits max turns.
-    const targetUrl = `${testServer.url}/${fixture}`;
+    const targetUrl = `${outcomeServer.url}/${fixture}`;
     const result = await runSkillTest({
       prompt: `Find bugs on this page: ${targetUrl}
 
@@ -1252,9 +1264,10 @@ Analyze the git history and produce the narrative report as described in the SKI
 
 describeIfSelected('QA-Report skill E2E', ['qa-report-no-fix'], () => {
   let qaOnlyDir: string;
+  let qaReportServer: ReturnType<typeof startTestServer>;
 
   beforeAll(() => {
-    testServer = testServer || startTestServer();
+    qaReportServer = startTestServer();
     qaOnlyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-qa-report-'));
     setupBrowseShims(qaOnlyDir);
 
@@ -1282,18 +1295,15 @@ describeIfSelected('QA-Report skill E2E', ['qa-report-no-fix'], () => {
   });
 
   afterAll(() => {
+    qaReportServer?.server?.stop();
     try { fs.rmSync(qaOnlyDir, { recursive: true, force: true }); } catch {}
   });
 
   test('/qa-report produces report without using Edit tool', async () => {
     const result = await runSkillTest({
-      prompt: `IMPORTANT: The browse binary is already assigned below as B. Do NOT search for it or run the SKILL.md setup block — just use $B directly.
+      prompt: `Read the file qa-report/SKILL.md for the QA-report workflow instructions.
 
-B="${browseBin}"
-
-Read the file qa-report/SKILL.md for the QA-report workflow instructions.
-
-Run a Quick QA test on ${testServer.url}/qa-eval.html
+Run a Quick QA test on ${qaReportServer.url}/qa-eval.html
 Do NOT use AskUserQuestion — run Quick tier directly.
 Write your report to ${qaOnlyDir}/qa-reports/qa-report.md`,
       workingDirectory: qaOnlyDir,

@@ -127,7 +127,7 @@ login), switch to a visible browser or connect to the user's running browser:
 $AB --headed open https://example.com/login
 
 # Or connect to an existing Chrome instance with remote debugging enabled
-agent-browser --session gstack-$PPID --auto-connect snapshot -i
+$AB --auto-connect snapshot -i
 ```
 
 Then tell the user what happened via AskUserQuestion and continue after they say they are done.
