@@ -16,6 +16,7 @@ description: |
   - Creating a design system → suggest /design-consultation
   - Researching a library, framework, or proposed tech stack → suggest /docs-research
   - Debugging errors → suggest /investigate
+  - Capturing a painful lesson into durable rules/tests → suggest /compound
   - Testing the app → suggest /qa
   - Code review before merge → suggest /review
   - Visual design audit → suggest /design-review

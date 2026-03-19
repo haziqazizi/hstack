@@ -5,7 +5,8 @@ description: |
   Pre-landing PR review. Analyzes diff against the base branch for SQL safety, LLM trust
   boundary violations, conditional side effects, and other structural issues. Use when
   asked to "review this PR", "code review", "pre-landing review", or "check my diff".
-  Proactively suggest when the user is about to merge or land code changes.
+  Proactively suggest when the user is about to merge or land code changes. For bug-fix
+  branches, require proof that the bug existed and identify what now prevents recurrence.
 allowed-tools:
   - Bash
   - Read
@@ -258,7 +259,7 @@ Run `git diff origin/<base>` to get the full diff. This includes both committed 
 Apply the checklist against the diff in two passes:
 
 1. **Pass 1 (CRITICAL):** SQL & Data Safety, Race Conditions & Concurrency, LLM Output Trust Boundary, Enum & Value Completeness
-2. **Pass 2 (INFORMATIONAL):** Conditional Side Effects, Magic Numbers & String Coupling, Dead Code & Consistency, LLM Prompt Issues, Test Gaps, View/Frontend
+2. **Pass 2 (INFORMATIONAL):** Conditional Side Effects, Magic Numbers & String Coupling, Dead Code & Consistency, LLM Prompt Issues, Test Gaps, Proof & Learning Loop, View/Frontend
 
 **Enum & Value Completeness requires reading code OUTSIDE the diff.** When the diff introduces a new enum value, status, tier, or type constant, use Grep to find all files that reference sibling values, then Read those files to check if the new value is handled. This is the one category where within-diff review is insufficient.
 
@@ -359,6 +360,8 @@ Before producing the final review output:
 - If you claim "this pattern is safe" → cite the specific line proving safety
 - If you claim "this is handled elsewhere" → read and cite the handling code
 - If you claim "tests cover this" → name the test file and method
+- If this branch fixes a bug → cite the failing test, deterministic repro, assertion, trace, or other proof artifact that showed the bug was real. If none exists, flag the proof gap.
+- If this branch fixes a bug → identify what now prevents recurrence (regression test, rule-file update, architecture-doc update, CLAUDE.md rule, workflow/eval update). If nothing durable changed, flag the recurrence-prevention gap.
 - Never say "likely handled" or "probably tested" — verify or flag as unknown
 
 **Rationalization prevention:** "This looks fine" is not a finding. Either cite evidence it IS fine, or flag it as unverified.

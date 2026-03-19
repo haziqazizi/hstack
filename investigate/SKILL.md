@@ -7,7 +7,8 @@ description: |
   Use when asked to "debug this", "fix this bug", "why is this broken",
   "investigate this error", or "root cause analysis".
   Proactively suggest when the user reports errors, unexpected behavior, or
-  is troubleshooting why something stopped working.
+  is troubleshooting why something stopped working. If brute forcing starts,
+  stop and research the docs, stack rules, and prior learnings before editing more code.
 allowed-tools:
   - Bash
   - Read
@@ -170,6 +171,29 @@ ATTEMPTED: [what you tried]
 RECOMMENDATION: [what the user should do next]
 ```
 
+## Web Search (Exa)
+
+If the preamble printed `EXA_SEARCH: EXA_READY`, Exa web search is available. Use the gstack CLI for all web research:
+
+**Search the web:**
+```bash
+~/.claude/skills/gstack/bin/gstack-web-search "your search query"
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --results 10
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --contents          # include full page text
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --category news     # filter: company, research paper, news, pdf, github, tweet, personal site
+~/.claude/skills/gstack/bin/gstack-web-search "your query" --domain github.com # restrict to domain
+```
+
+**Read a specific URL:**
+```bash
+~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page"
+~/.claude/skills/gstack/bin/gstack-read-url "https://example.com/page" --max-chars 20000
+```
+
+If `EXA_SEARCH: EXA_MISSING`, web search is not configured. Tell the user:
+"Web search is not available — run `./setup` in the gstack directory to add your Exa API key, or add it manually: `echo 'EXA_API_KEY=your-key' >> ~/.gstack/.env`"
+Then continue without web search — use local docs and Context7 only.
+
 # Systematic Debugging
 
 ## Iron Law
@@ -188,13 +212,17 @@ Gather context before forming any hypothesis.
 
 2. **Read the code:** Trace the code path from the symptom back to potential causes. Use Grep to find all references, Read to understand the logic.
 
-3. **Check recent changes:**
+3. **Read stack context:** If `.claude/stack.yaml` exists, read it. Read the relevant files in `.claude/architecture/rules/`, recent memos in `.claude/research/`, and related notes in `.claude/compound/` before forming a fix. Bugs often repeat known architectural mistakes.
+
+4. **Check recent changes:**
    ```bash
    git log --oneline -20 -- <affected-files>
    ```
    Was this working before? What changed? A regression means the root cause is in the diff.
 
-4. **Reproduce:** Can you trigger the bug deterministically? If not, gather more evidence before proceeding.
+5. **Reproduce:** Can you trigger the bug deterministically? If not, gather more evidence before proceeding.
+
+6. **If framework behavior is unclear, research before editing:** Use local docs first, then `gstack-web-search` for official docs, changelogs, and issue threads. If the question is bigger than a quick search, recommend or run `/docs-research` before changing architecture-level behavior.
 
 Output: **"Root cause hypothesis: ..."** — a specific, testable claim about what is wrong and why.
 
@@ -252,7 +280,9 @@ Before writing ANY fix, verify your hypothesis.
 
 2. **If the hypothesis is wrong:** Return to Phase 1. Gather more evidence. Do not guess.
 
-3. **3-strike rule:** If 3 hypotheses fail, **STOP**. Use AskUserQuestion:
+3. **Brute-force circuit breaker:** If you have made 2 fix attempts or code changes without new evidence, STOP. Summarize what you know, say why the current theory is unproven, read the stack rules/research/compound notes again, and use `gstack-web-search` or `/docs-research` before changing more code.
+
+4. **3-strike rule:** If 3 hypotheses fail, **STOP**. Use AskUserQuestion:
    ```
    3 hypotheses tested, none match. This may be an architectural issue
    rather than a simple bug.
@@ -277,13 +307,15 @@ Once root cause is confirmed:
 
 2. **Minimal diff:** Fewest files touched, fewest lines changed. Resist the urge to refactor adjacent code.
 
-3. **Write a regression test** that:
+3. **Proof first:** For a reproducible bug, write the failing regression test before the final fix. If a failing automated test is impossible, create the smallest proof artifact you can: a deterministic repro, assertion, trace, or script that shows the bug exists.
+
+4. **Write a regression test** that:
    - **Fails** without the fix (proves the test is meaningful)
    - **Passes** with the fix (proves the fix works)
 
-4. **Run the full test suite.** Paste the output. No regressions allowed.
+5. **Run the full test suite.** Paste the output. No regressions allowed.
 
-5. **If the fix touches >5 files:** Use AskUserQuestion to flag the blast radius:
+6. **If the fix touches >5 files:** Use AskUserQuestion to flag the blast radius:
    ```
    This fix touches N files. That's a large blast radius for a bug fix.
    A) Proceed — the root cause genuinely spans these files
@@ -301,6 +333,12 @@ Run the test suite and paste the output.
 
 Output a structured debug report:
 ```
+
+Then answer these two questions explicitly:
+1. **Human prevention:** What will help another engineer avoid this mistake next time — a test, rule file update, stronger abstraction, better error, or a doc change?
+2. **Agent prevention:** What should change so the agent does not make the same mistake again — `/investigate`, `/review`, `/plan-eng-review`, `.claude/architecture/rules/`, `CLAUDE.md`, or a new eval fixture?
+
+If the lesson is durable, recommend `/compound` or write the incident note yourself if the user explicitly asked for learning capture.
 DEBUG REPORT
 ════════════════════════════════════════
 Symptom:         [what the user observed]
@@ -318,8 +356,10 @@ Status:          DONE | DONE_WITH_CONCERNS | BLOCKED
 ## Important Rules
 
 - **3+ failed fix attempts → STOP and question the architecture.** Wrong architecture, not failed hypothesis.
+- **2 fix attempts without new evidence → STOP brute forcing and research.**
 - **Never apply a fix you cannot verify.** If you can't reproduce and confirm, don't ship it.
 - **Never say "this should fix it."** Verify and prove it. Run the tests.
+- **For reproducible bugs, the default is failing test first.**
 - **If fix touches >5 files → AskUserQuestion** about blast radius before proceeding.
 - **Completion status:**
   - DONE — root cause found, fix applied, regression test written, all tests pass

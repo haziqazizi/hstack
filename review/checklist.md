@@ -84,6 +84,12 @@ To do this: use Grep to find all references to the sibling values (e.g., grep fo
 - `.expects(:something).never` missing when a code path should explicitly NOT call an external service
 - Security enforcement features (blocking, rate limiting, auth) without integration tests verifying the enforcement path works end-to-end
 
+#### Proof & Learning Loop
+- Bug-fix branches that never prove the bug existed (no failing test, deterministic repro, assertion, trace, or equivalent proof artifact)
+- Fixes that claim "root cause" without citing the evidence that confirmed it
+- Painful bugs that add no durable prevention: no regression test, no rule-file update, no architecture-doc update, no CLAUDE.md rule, and no eval/test harness change
+- Repeated mistakes in the same area where the branch should also update `.claude/architecture/rules/`, `docs/architecture/stacks/`, or a workflow checklist
+
 #### Completeness Gaps
 - Shortcut implementations where the complete version would cost <30 minutes CC time (e.g., partial enum handling, incomplete error paths, missing edge cases that are straightforward to add)
 - Options presented with only human-team effort estimates — should show both human and CC+gstack time
@@ -119,6 +125,7 @@ CRITICAL (highest severity):      INFORMATIONAL (lower severity):
 ├─ LLM Output Trust Boundary      ├─ Dead Code & Consistency
 └─ Enum & Value Completeness      ├─ LLM Prompt Issues
                                    ├─ Test Gaps
+                                   ├─ Proof & Learning Loop
                                    ├─ Completeness Gaps
                                    ├─ Crypto & Entropy
                                    ├─ Time Window Safety

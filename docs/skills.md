@@ -12,6 +12,7 @@ Detailed guides for every gstack skill — philosophy, workflow, and examples.
 | [`/docs-research`](#docs-research) | **Technical Researcher** | Read repo context first, then official docs and current web sources. Writes durable memos for unfamiliar libraries, stack changes, and framework behavior questions. |
 | [`/review`](#review) | **Staff Engineer** | Find the bugs that pass CI but blow up in production. Auto-fixes the obvious ones. Flags completeness gaps. |
 | [`/investigate`](#investigate) | **Debugger** | Systematic root-cause debugging. Iron Law: no fixes without investigation. Traces data flow, tests hypotheses, stops after 3 failed fixes. |
+| [`/compound`](#compound) | **Learning Engineer** | Capture painful lessons from bugs, reviews, and fixes. Promotes them into tests, stack rules, docs, and evals so the same mistake gets harder to repeat. |
 | [`/design-review`](#design-review) | **Designer Who Codes** | Live-site visual audit + fix loop. 80-item audit, then fixes what it finds. Atomic commits, before/after screenshots. |
 | [`/qa`](#qa) | **QA Lead** | Test your app, find bugs, fix them with atomic commits, re-verify. Auto-generates regression tests for every fix. |
 | [`/qa-report`](#qa) | **QA Reporter** | Same methodology as /qa but report only. Use when you want a pure bug report without code changes. |
@@ -472,6 +473,28 @@ I want the model imagining the production incident before it happens.
 When something is broken and you don't know why, `/investigate` is your systematic debugger. It follows the Iron Law: **no fixes without root cause investigation first.**
 
 Instead of guessing and patching, it traces data flow, matches against known bug patterns, and tests hypotheses one at a time. If three fix attempts fail, it stops and questions the architecture instead of thrashing. This prevents the "let me try one more thing" spiral that wastes hours.
+
+It also has an explicit anti-bruteforce rule now: if two fix attempts happen without any new evidence, the workflow stops, rereads stack rules and prior learnings, and does docs research before touching more code. Reproducible bugs default to **failing test first, then fix, then passing test**.
+
+---
+
+## `/compound`
+
+This is how the workflow actually compounds.
+
+After a painful bug, a surprising review finding, or a debugging session that taught you something real, `/compound` reads the evidence — diff, tests, stack rules, research memos, architecture docs — and writes a structured incident note to `.claude/compound/incidents/`.
+
+Then it asks the key question: **where should this lesson live so it becomes harder to repeat?**
+
+The promotion ladder is explicit:
+
+1. regression test or lint if the bug is executable
+2. stack-specific rule file if the lesson is architectural
+3. architecture doc if the rationale needs more space
+4. `CLAUDE.md` for short operational rules
+5. skill/eval changes if the agent itself needs a better harness
+
+This is the handoff from one task to the next. `/docs-research` helps you learn before coding. `/investigate` and `/review` enforce discipline during the work. `/compound` turns the lesson into durable memory afterward.
 
 ---
 
